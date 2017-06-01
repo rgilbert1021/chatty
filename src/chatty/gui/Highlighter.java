@@ -117,7 +117,7 @@ public class Highlighter {
     }
 
     public String getLastResp() { return lastResp; }
-    
+
     /**
      * Checks whether the given message consisting of username and text should
      * be highlighted.
@@ -195,7 +195,7 @@ public class Highlighter {
      * An item can be prefixed with a user:username, so the username as well
      * as the item after it has to match.
      */
-    static class HighlightItem {
+    public static class HighlightItem {
         
         private String username;
         private Pattern usernamePattern;
@@ -229,7 +229,7 @@ public class Highlighter {
             }
         }
         
-        HighlightItem(String item) {
+        public HighlightItem(String item) {
             List<String> list = new ArrayList<String>();
             Matcher m = Pattern.compile("[^\\s\"']+|\"[^\"]*\"|'[^']*'").matcher(item);
             while(m.find()) {
@@ -388,7 +388,7 @@ public class Highlighter {
         /**
          * Check whether a message matches this item.
          * 
-         * @param user The username in lowercase
+         * @param lowercaseUsername The username in lowercase
          * @param text The text as received
          * @param lowercaseText The text in lowercase (minor optimization, so
          *  it doesn't have to be made lowercase for every item)

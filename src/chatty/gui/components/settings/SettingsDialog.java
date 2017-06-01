@@ -46,7 +46,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
             "ffz", "nod3d", "noddraw",
             "userlistWidth", "userlistMinWidth", "userlistEnabled",
             "capitalizedNames", "correctlyCapitalizedNames", "ircv3CapitalizedNames",
-            "tabOrder", "tabsMwheelScrolling", "inputFont",
+            "tabOrder", "tabsMwheelScrolling", "tabsMwheelScrollingAnywhere", "inputFont",
             "bttvEmotes", "botNamesBTTV", "botNamesFFZ", "ffzEvent",
             "logPath", "logTimestamp", "logSplit", "logSubdirectories",
             "tabsPlacement", "tabsLayout", "logLockFiles"
@@ -205,7 +205,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
         cards.add(new AutoReplySettings(this), PANEL_AUTOREPLY);
         cards.add(new HistorySettings(this), PANEL_HISTORY);
         cards.add(new SoundSettings(this), PANEL_SOUND);
-        notificationSettings = new NotificationSettings(this);
+        notificationSettings = new NotificationSettings(this, settings);
         cards.add(notificationSettings, PANEL_NOTIFICATIONS);
         usercolorSettings = new UsercolorSettings(this);
         cards.add(usercolorSettings, PANEL_USERCOLORS);
@@ -337,6 +337,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
         imageSettings.setTwitchBadgeTypes(owner.getTwitchBadgeTypes());
         hotkeySettings.setData(owner.hotkeyManager.getActionsMap(),
                 owner.hotkeyManager.getData(), owner.hotkeyManager.globalHotkeysAvailable());
+        notificationSettings.setData(owner.getNotificationData());
     }
     
     /**
@@ -402,6 +403,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
         owner.setUsercolorData(usercolorSettings.getData());
         owner.setUsericonData(imageSettings.getData());
         owner.hotkeyManager.setData(hotkeySettings.getData());
+        owner.setNotificationData(notificationSettings.getData());
         if (restartRequired) {
             JOptionPane.showMessageDialog(this, RESTART_REQUIRED_INFO, "Info", JOptionPane.INFORMATION_MESSAGE);
         }
