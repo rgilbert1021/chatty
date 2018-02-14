@@ -58,6 +58,7 @@ public class Notification {
         private static Map<String, String> createMessageSubtypes() {
             Map<String, String> result = new LinkedHashMap<>();
             result.put("own", "Trigger on own messages as well");
+            result.put("bits", "Trigger only on messages containing bits");
             return result;
         }
     }
@@ -268,7 +269,7 @@ public class Notification {
         if (matcherItem == null || text == null) {
             return true;
         }
-        return matcherItem.matches(user, text, StringUtil.toLowerCase(text));
+        return matcherItem.matches(user, text, StringUtil.toLowerCase(text), true);
     }
     
     public boolean hasChannel() {

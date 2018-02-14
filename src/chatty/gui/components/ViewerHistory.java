@@ -7,6 +7,10 @@ import chatty.gui.components.menus.ContextMenu;
 import chatty.gui.components.menus.ContextMenuAdapter;
 import chatty.gui.components.menus.ContextMenuListener;
 import chatty.gui.components.menus.HistoryContextMenu;
+import chatty.lang.Language;
+import chatty.util.api.CommunitiesManager.Community;
+import chatty.util.api.StreamInfo;
+import chatty.util.api.StreamInfo.StreamType;
 import chatty.util.api.StreamInfoHistoryItem;
 import java.awt.*;
 import java.awt.event.ActionEvent;
@@ -58,7 +62,7 @@ public class ViewerHistory extends JComponent {
     /**
      * The font to use for text.
      */
-    private static final Font FONT = new Font("Consolas",Font.PLAIN,12);
+    private Font font = new Font(Font.DIALOG, Font.PLAIN, 12);
     /**
      * The margin all around the graph area.
      */
@@ -119,7 +123,7 @@ public class ViewerHistory extends JComponent {
      */
     private LinkedHashMap<Long, Color> colors = new LinkedHashMap<>();
     
-    private final ContextMenu contextMenu = new HistoryContextMenu();
+    private final HistoryContextMenu contextMenu = new HistoryContextMenu();
     
     /*
      * Values that affect what is rendered.
@@ -128,29 +132,90 @@ public class ViewerHistory extends JComponent {
     private boolean showInfo = true;
     private long hoverEntry = -1;
     private boolean fixedHoverEntry = false;
-    private boolean showFullRange = false;
+    private boolean verticalZoom = false;
     
     private ViewerHistoryListener listener;
 
+    private static class HistoryTest {
+        
+        // Starting with 1 because selecting fixed range checks for 0 (which it
+        // shouldn't be outside testing)
+        public long currentTime = 1;
+        public LinkedHashMap<Long, StreamInfoHistoryItem> history = new LinkedHashMap<>();
+        public long startTime;
+        public long picnicStartTime;
+        
+        public void add(String title, String game, int viewers, StreamType streamType, Community... communities) {
+            java.util.List<Community> c;
+            if (communities == null) {
+                c = null;
+            } else {
+                c = Arrays.asList(communities);
+            }
+            history.put(currentTime, new StreamInfoHistoryItem(currentTime,
+                    viewers, title, game, streamType, c,
+                    startTime, picnicStartTime));
+            currentTime += 120*1000;
+        }
+        
+    }
     
     public ViewerHistory() {
         // Test data
         if (Chatty.DEBUG) {
+            
+            HistoryTest test = new HistoryTest();
+            
+            
             history = new LinkedHashMap<>();
-            history.put((long) 1000*1000, new StreamInfoHistoryItem(5,"Leveling Battlemage","The Elder Scrolls V: Skyrim"));
-            history.put((long) 1120*1000, new StreamInfoHistoryItem(4,"Leveling Battlemage","The Elder Scrolls V: Skyrim"));
-            history.put((long) 1240*1000, new StreamInfoHistoryItem(4,"Leveling Battlemage","The Elder Scrolls V: Skyrim"));
-            history.put((long) 1360*1000, new StreamInfoHistoryItem(6,"Leveling Battlemage","The Elder Scrolls V: Skyrim"));
-            history.put((long) 1480*1000, new StreamInfoHistoryItem(8,"Leveling Battlemage","The Elder Scrolls V: Skyrim"));
-            history.put((long) 1600*1000, new StreamInfoHistoryItem(8,"Pause","The Elder Scrolls V: Skyrim"));
-            history.put((long) 1720*1000, new StreamInfoHistoryItem(10,"Pause","The Elder Scrolls V: Skyrim"));
-            history.put((long) 1840*1000, new StreamInfoHistoryItem(12,"Pause","The Elder Scrolls V: Skyrim"));
-            history.put((long) 1960*1000, new StreamInfoHistoryItem(12,"Diebesgilde","The Elder Scrolls V: Skyrim"));
-            history.put((long) 2080*1000, new StreamInfoHistoryItem(18,"Diebesgilde","The Elder Scrolls V: Skyrim"));
-            history.put((long) 2200*1000, new StreamInfoHistoryItem(20,"Diebesgilde","The Elder Scrolls V: Skyrim"));
-            history.put((long) 2320*1000, new StreamInfoHistoryItem(22,"Diebesgilde","The Elder Scrolls V: Skyrim"));
-            history.put((long) 2440*1000, new StreamInfoHistoryItem(1000,"Diebesgilde","The Elder Scrolls V: Skyrim"));
-            history.put((long) 2560*1000, new StreamInfoHistoryItem(2500,"Diebesgilde","The Elder Scrolls V: Skyrim"));
+            Community c1 = new Community("abc", "VarietyStreaming");
+            Community c2 = new Community("abc", "Speedrunning");
+            Community c3 = new Community("abc", "Pro-Audio");
+            
+            test.startTime = -5*60*1000;
+            test.picnicStartTime = -10*60*1000;
+            test.add("Leveling Battlemage", "The Elder Scrolls V: Skyrim", 5, StreamType.LIVE, c1, c2);
+            test.add("Leveling Battlemage", "The Elder Scrolls V: Skyrim", 4, StreamType.LIVE, c1, c2);
+            test.add("Leveling Battlemage", "The Elder Scrolls V: Skyrim", 4, StreamType.LIVE, c1, c2);
+            test.add("Leveling Battlemage", "The Elder Scrolls V: Skyrim", 6, StreamType.LIVE, c1, c2, c3);
+            test.add("Leveling Battlemage", "The Elder Scrolls V: Skyrim", 8, StreamType.LIVE, c1, c2, c3);
+            test.add("Pause", "The Elder Scrolls V: Skyrim", 5, StreamType.LIVE, c1);
+            test.add("Pause", "The Elder Scrolls V: Skyrim", 5, StreamType.LIVE, c1);
+            test.add("Pause", "The Elder Scrolls V: Skyrim", 10, StreamType.LIVE, c1);
+            test.add("Pause", "The Elder Scrolls V: Skyrim", 8, StreamType.LIVE, c1);
+            test.add("Diebesgilde", "The Elder Scrolls V: Skyrim", 5, StreamType.WATCH_PARTY, c1);
+            test.add("Diebesgilde", "The Elder Scrolls V: Skyrim", 5, StreamType.WATCH_PARTY, c1);
+            test.add("Diebesgilde", "The Elder Scrolls V: Skyrim", 10, StreamType.WATCH_PARTY, c1);
+            test.add("Diebesgilde", "The Elder Scrolls V: Skyrim", 12, StreamType.WATCH_PARTY, c1);
+            test.add("Diebesgilde", "The Elder Scrolls V: Skyrim", 14, StreamType.WATCH_PARTY, c1);
+            test.add("Diebesgilde", "The Elder Scrolls V: Skyrim", 12, StreamType.WATCH_PARTY, c1);
+            test.add("Diebesgilde", "The Elder Scrolls V: Skyrim", 18, StreamType.WATCH_PARTY, c1);
+            test.add("any% attempts", "Tomb Raider III: Adventures of Lara Croft", 20, StreamType.LIVE, (Community) null);
+            test.add("any% attempts", "Tomb Raider III: Adventures of Lara Croft", 34, StreamType.LIVE, c2);
+            test.add("any% attempts", "Tomb Raider III: Adventures of Lara Croft", 40, StreamType.LIVE, c2);
+            test.add("any% attempts", "Tomb Raider III: Adventures of Lara Croft", 45, StreamType.LIVE, c2);
+            test.add("any% attempts", "Tomb Raider III: Adventures of Lara Croft", 59, StreamType.LIVE, c2);
+            for (int i=0;i<100;i++) {
+                test.add("any% attempts", "Tomb Raider III: Adventures of Lara Croft", 59, StreamType.LIVE, c2);
+            }
+            
+//            history.put((long) 1000*1000, new StreamInfoHistoryItem(5,"Leveling Battlemage","The Elder Scrolls V: Skyrim", StreamType.LIVE, c1, 1000*1000, 1000*1000));
+//            history.put((long) 1120*1000, new StreamInfoHistoryItem(4,"Leveling Battlemage","The Elder Scrolls V: Skyrim", StreamType.LIVE, c1, 1120*1000, 1120*1000));
+//            history.put((long) 1240*1000, new StreamInfoHistoryItem(4,"Leveling Battlemage","The Elder Scrolls V: Skyrim", StreamType.LIVE, c1, 1240*1000, 1240*1000));
+//            history.put((long) 1360*1000, new StreamInfoHistoryItem(6,"Leveling Battlemage","The Elder Scrolls V: Skyrim", StreamType.LIVE, c1, 1360*1000, 1360*1000));
+//            history.put((long) 1480*1000, new StreamInfoHistoryItem(8,"Leveling Battlemage","The Elder Scrolls V: Skyrim", StreamType.LIVE, c1, 1480*1000, 1480*1000));
+//            history.put((long) 1600*1000, new StreamInfoHistoryItem(8,"Pause","The Elder Scrolls V: Skyrim", StreamType.LIVE, c1, 1600*1000, 1600*1000));
+//            history.put((long) 1720*1000, new StreamInfoHistoryItem(10,"Pause","The Elder Scrolls V: Skyrim", StreamType.LIVE, c1, 1720*1000, 1720*1000));
+//            history.put((long) 1840*1000, new StreamInfoHistoryItem(12,"Pause","The Elder Scrolls V: Skyrim", StreamType.LIVE, c1, 1840*1000, 1840*1000));
+//            history.put((long) 1960*1000, new StreamInfoHistoryItem(12,"Diebesgilde","The Elder Scrolls V: Skyrim", StreamType.WATCH_PARTY, c1, 1960*1000, 1960*1000));
+//            history.put((long) 2080*1000, new StreamInfoHistoryItem(18,"Diebesgilde","The Elder Scrolls V: Skyrim", StreamType.WATCH_PARTY, c1, 2080*1000, 2080*1000));
+//            history.put((long) 2200*1000, new StreamInfoHistoryItem(20,"Diebesgilde","The Elder Scrolls V: Skyrim", StreamType.WATCH_PARTY, c1, 2200*1000, 2200*1000));
+//            history.put((long) 2320*1000, new StreamInfoHistoryItem(22,"Diebesgilde","The Elder Scrolls V: Skyrim", StreamType.WATCH_PARTY, c1, 2320*1000, 2320*1000));
+//            history.put((long) 2440*1000, new StreamInfoHistoryItem(40,"Diebesgilde","The Elder Scrolls V: Skyrim", StreamType.WATCH_PARTY, c1, 2440*1000, 2440*1000));
+//            history.put((long) 2560*1000, new StreamInfoHistoryItem(72,"Diebesgilde","The Elder Scrolls V: Skyrim", StreamType.WATCH_PARTY, c1, 2560*1000, 2560*1000));
+//            history.put((long) 2760*1000, new StreamInfoHistoryItem(72,"any% attempts","Tomb Raider III: Adventures of Lara Croft", StreamType.LIVE, null, 2760*1000, 2760*1000));
+//            history.put((long) 2960*1000, new StreamInfoHistoryItem(68,"any% attempts","Tomb Raider III: Adventures of Lara Croft", StreamType.LIVE, c2, 2960*1000, 2960*1000));
+//            history.put((long) 3160*1000, new StreamInfoHistoryItem(71,"any% attempts","Tomb Raider III: Adventures of Lara Croft", StreamType.LIVE, c2, 3160*1000, 3160*1000));
             //history.put((long) 2680*1000, new StreamInfoHistoryItem());
             //history.put((long) 2800*1000, new StreamInfoHistoryItem());
             //history.put((long) 2920*1000, new StreamInfoHistoryItem());
@@ -162,12 +227,11 @@ public class ViewerHistory extends JComponent {
 //        history.put((long)3000*1000,123);
 //        history.put((long)3300*1000,-1);
 //        history.put((long)3600*1000,0);
-            setHistory("", history);
+            setHistory("", test.history);
         }
         MyMouseListener mouseListener = new MyMouseListener();
         addMouseListener(mouseListener);
         addMouseMotionListener(mouseListener);
-        contextMenu.addContextMenuListener(new MyContextMenuListener());
     }
     
     public void setListener(ViewerHistoryListener listener) {
@@ -211,9 +275,9 @@ public class ViewerHistory extends JComponent {
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         
         // Font
-        FontMetrics fontMetrics = g.getFontMetrics(FONT);
+        FontMetrics fontMetrics = g.getFontMetrics(font);
         int fontHeight = fontMetrics.getHeight();
-        g.setFont(FONT);
+        g.setFont(font);
         
         int topTextY = fontMetrics.getAscent();
         
@@ -235,12 +299,14 @@ public class ViewerHistory extends JComponent {
             long ago = System.currentTimeMillis() - endTime;
             String text;
             if (ago > CONSIDERED_AS_NOW) {
-                text = "latest: " + Helper.formatViewerCount(viewers);
+                text = Language.getString("channelInfo.viewers.latest",
+                        Helper.formatViewerCount(viewers));
             } else {
-                text = "now: " + Helper.formatViewerCount(viewers);
+                text = Language.getString("channelInfo.viewers.now",
+                        Helper.formatViewerCount(viewers));
             }
             if (viewers == -1) {
-                text = "Stream offline";
+                text = Language.getString("channelInfo.streamOffline");
             }
             nowTextX = getWidth() - fontMetrics.stringWidth(text);
             g.drawString(text, nowTextX, topTextY);
@@ -248,7 +314,7 @@ public class ViewerHistory extends JComponent {
         
         // Default text when no data is present
         if (history == null || history.size() < 2) {
-            String text = "No viewer history yet";
+            String text = Language.getString("channelInfo.viewers.noHistory");
             int textWidth = fontMetrics.stringWidth(text);
             int y = getHeight() / 2 + fontMetrics.getDescent();
             int x = (getWidth() - textWidth) / 2;
@@ -279,16 +345,17 @@ public class ViewerHistory extends JComponent {
         
         
         // Show info on hovered entry
-        String maxValueText = "max: "+Helper.formatViewerCount(maxValue);
+        String maxValueText = Language.getString("channelInfo.viewers.max",
+                Helper.formatViewerCount(maxValue));
         int maxValueEnd = fontMetrics.stringWidth(maxValueText);
         boolean displayMaxValue = true;
         
         if (hoverEntry != -1) {
             Integer viewers = history.get(hoverEntry).getViewers();
             Date d = new Date(hoverEntry);
-            String text = "Viewers: "+Helper.formatViewerCount(viewers)+" ("+sdf.format(d)+")";
+            String text = Language.getString("channelInfo.viewers.hover", Helper.formatViewerCount(viewers))+" ("+sdf.format(d)+")";
             if (viewers == -1) {
-                text = "Stream offline ("+sdf.format(d)+")";
+                text = Language.getString("channelInfo.streamOffline")+" ("+sdf.format(d)+")";
             }
             int x = getWidth() - fontMetrics.stringWidth(text);
             if (maxValueEnd > x) {
@@ -297,7 +364,8 @@ public class ViewerHistory extends JComponent {
             g.drawString(text, x, topTextY);
         }
         
-        String minText = "min: "+Helper.formatViewerCount(minValue);
+        String minText = Language.getString("channelInfo.viewers.min",
+                Helper.formatViewerCount(minValue));
         int minTextWidth = fontMetrics.stringWidth(minText);
         
         // Draw Times
@@ -308,7 +376,8 @@ public class ViewerHistory extends JComponent {
             g.drawString(timeText, textX, getHeight() - 1);
 
             if (minValue >= 1000 && timeTextWidth + minTextWidth > width) {
-                minText = "min: " + minValue / 1000 + "k";
+                minText = Language.getString("channelInfo.viewers.min",
+                        minValue / 1000)+"k";
             }
         }
         
@@ -331,7 +400,7 @@ public class ViewerHistory extends JComponent {
 
         // Calculation factors for calculating the points location
         int range = maxValue - minValue;
-        if (showFullRange) {
+        if (!verticalZoom) {
             range = maxValue;
         }
         if (range == 0) {
@@ -345,6 +414,7 @@ public class ViewerHistory extends JComponent {
         
         int prevX = -1;
         int prevY = -1;
+        StreamInfoHistoryItem prevItem = null;
         Iterator<Entry<Long,StreamInfoHistoryItem>> it = history.entrySet().iterator();
         while (it.hasNext()) { 
             Entry<Long,StreamInfoHistoryItem> entry = it.next();
@@ -364,7 +434,7 @@ public class ViewerHistory extends JComponent {
             // Calculate point location
             int x = (int)(hMargin + offsetTime * pixelPerTime);
             int y;
-            if (showFullRange) {
+            if (!verticalZoom) {
                 y = (int)(-vMargin + getHeight() - (viewers) * pixelPerViewer);
             }
             else {
@@ -373,19 +443,26 @@ public class ViewerHistory extends JComponent {
             
             // Draw connecting line
             if (prevX != -1) {
+                if (entry.getValue().getStreamType() != StreamType.LIVE &&
+                        prevItem != null && prevItem.getStreamType() != StreamType.LIVE) {
+                    g.setColor(Color.LIGHT_GRAY);
+                } else {
+                    g.setColor(foreground_color);
+                }
                 g.drawLine(x,y,prevX,prevY);
             }
             
-            // Save point coordinates to be able to draw the line next loop
+            // Save point coordinates to be able to draw the line next iteration
             prevX = x;
             prevY = y;
+            prevItem = entry.getValue();
             
             // Save point locations to draw points and to find entries on hover
             locations.put(new Point(x,y),time);
         }
         
         
-        
+        prevItem = null;
         // Draw points (after lines, so they are in front)
         for (Point point : locations.keySet()) {
             int x = point.x;
@@ -405,7 +482,17 @@ public class ViewerHistory extends JComponent {
                     g.setColor(colors.get(seconds));
                 }
             }
-            g.fillOval(x  - POINT_SIZE / 2, y  - POINT_SIZE / 2, POINT_SIZE, POINT_SIZE);
+            int pointSize = POINT_SIZE;
+            
+            if (prevItem != null && !Objects.equals(prevItem.getCommunities(), historyObject.getCommunities())) {
+                pointSize += 1;
+                g.fillRect(x - pointSize / 2, y - pointSize / 2, pointSize, pointSize);
+            } else {
+                g.fillOval(x - pointSize / 2, y - pointSize / 2, pointSize, pointSize);
+            }
+            
+            
+            prevItem = historyObject;
         }
     }
     
@@ -589,7 +676,11 @@ public class ViewerHistory extends JComponent {
      */
     private void manageChannelSpecificVars(String stream) {
         if (!stream.equals(currentStream)) {
+            if (hoverEntry > 0 && listener != null) {
+                listener.noItemSelected();
+            }
             hoverEntry = -1;
+            fixedHoverEntry = false;
             fixedStartTimes.put(currentStream, fixedStartTime);
             fixedEndTimes.put(currentStream, fixedEndTime);
             currentStream = stream;
@@ -636,18 +727,30 @@ public class ViewerHistory extends JComponent {
         repaint();
     }
     
+    public void setBaseFont(Font newFont) {
+        font = newFont.deriveFont(Font.PLAIN);
+        repaint();
+    }
+    
     /**
-     * Sets the time range to this numbre of milliseconds.
+     * Sets the time range to this number of minutes.
      * 
-     * @param range 
+     * @param minutes 
      */
-    public void setRange(long range) {
-        this.currentRange = range;
+    public void setRange(int minutes) {
+        contextMenu.setRange(minutes);
+        this.currentRange = minutes*60*1000;
         fixedStartTime = -1;
         fixedEndTime = -1;
         if (history != null) {
             updateVars();
         }
+        repaint();
+    }
+    
+    public void setVerticalZoom(boolean zoom) {
+        contextMenu.setZoom(zoom);
+        verticalZoom = zoom;
         repaint();
     }
 
@@ -684,18 +787,6 @@ public class ViewerHistory extends JComponent {
         if (e.isPopupTrigger()) {
             contextMenu.show(this, e.getX(), e.getY());
         }
-    }
-    
-    private class MyContextMenuListener extends ContextMenuAdapter {
-
-        @Override
-        public void menuItemClicked(ActionEvent e) {
-            if (e.getActionCommand().equals("toggleShowFullVerticalRange")) {
-                showFullRange = !showFullRange;
-                repaint();
-            }
-        }
-        
     }
     
     private class MyMouseListener extends MouseAdapter {
@@ -816,7 +907,7 @@ public class ViewerHistory extends JComponent {
                         LOGGER.warning("Hovered Entry "+hoverEntry+" was null");
                         hoverEntry = -1;
                     } else {
-                        listener.itemSelected(item.getViewers(), item.getTitle(), item.getGame());
+                        listener.itemSelected(item);
                     }
                 }
             }

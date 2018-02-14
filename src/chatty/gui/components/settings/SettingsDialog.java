@@ -1,15 +1,19 @@
 
 package chatty.gui.components.settings;
 
+import chatty.gui.GuiUtil;
+import chatty.gui.HtmlColors;
+import chatty.gui.LaF;
 import chatty.gui.MainGui;
 import chatty.gui.components.LinkLabel;
 import chatty.gui.components.LinkLabelListener;
+import chatty.lang.Language;
 import chatty.util.Sound;
 import chatty.util.settings.Setting;
 import chatty.util.settings.Settings;
 import java.awt.CardLayout;
+import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -21,13 +25,13 @@ import java.awt.event.WindowEvent;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Logger;
 import javax.swing.*;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
+import javax.swing.tree.DefaultMutableTreeNode;
 
 /**
  * Main settings dialog class that provides ways to add different kinds of
@@ -49,7 +53,8 @@ public class SettingsDialog extends JDialog implements ActionListener {
             "tabOrder", "tabsMwheelScrolling", "tabsMwheelScrollingAnywhere", "inputFont",
             "bttvEmotes", "botNamesBTTV", "botNamesFFZ", "ffzEvent",
             "logPath", "logTimestamp", "logSplit", "logSubdirectories",
-            "tabsPlacement", "tabsLayout", "logLockFiles"
+            "tabsPlacement", "tabsLayout", "logLockFiles",
+            "laf", "lafTheme", "language"
     ));
     
     private final Set<String> reconnectRequiredDef = new HashSet<>(Arrays.asList(
@@ -59,8 +64,8 @@ public class SettingsDialog extends JDialog implements ActionListener {
     private boolean restartRequired = false;
     private boolean reconnectRequired = false;
     
-    private static final String RESTART_REQUIRED_INFO = "<html><body style='width: 280px'>One or more settings "
-            + "you have changed require a restart of Chatty to take any or full effect.";
+    private static final String RESTART_REQUIRED_INFO = "<html><body style='width: 280px'>"
+            + Language.getString("settings.restartRequired");
     
     private static final String RECONNECT_REQUIRED_INFO = "<html><body style='width: 280px'>One or more settings "
             + "you have changed require you to reconnect to have any effect.";
@@ -76,70 +81,99 @@ public class SettingsDialog extends JDialog implements ActionListener {
     
     private final NotificationSettings notificationSettings;
     private final UsercolorSettings usercolorSettings;
+    private final MsgColorSettings msgColorSettings;
     private final ImageSettings imageSettings;
     private final HotkeySettings hotkeySettings;
     private final NameSettings nameSettings;
 
-    private static final String PANEL_MAIN = "Main";
-    private static final String PANEL_MESSAGES = "Messages";
-    private static final String PANEL_EMOTES = "Emoticons";
-    private static final String PANEL_USERICONS = "Usericons";
-    private static final String PANEL_COLORS = "Colors";
-    private static final String PANEL_HIGHLIGHT = "Highlight";
-    private static final String PANEL_IGNORE = "Ignore";
-    private static final String PANEL_AUTOREPLY = "Auto Reply";
-    private static final String PANEL_HISTORY = "History";
-    private static final String PANEL_SOUND = "Sounds";
-    private static final String PANEL_NOTIFICATIONS = "Notifications";
-    private static final String PANEL_USERCOLORS = "Usercolors";
-    private static final String PANEL_LOG = "Log to file";
-    private static final String PANEL_WINDOW = "Window";
-    private static final String PANEL_TABS = "Tabs";
-    private static final String PANEL_COMMANDS = "Commands";
-    private static final String PANEL_OTHER = "Other";
-    private static final String PANEL_ADVANCED = "Advanced";
-    private static final String PANEL_HOTKEYS = "Hotkeys";
-    private static final String PANEL_COMPLETION = "Completion";
-    private static final String PANEL_CHAT = "Chat";
-    private static final String PANEL_NAMES = "Names";
-    private static final String PANEL_MODERATION = "Moderation";
+    public enum Page {
+        MAIN("Main", Language.getString("settings.page.main")),
+        MESSAGES("Messages", Language.getString("settings.page.messages")),
+        EMOTES("Emoticons", Language.getString("settings.page.emoticons")),
+        USERICONS("Usericons", Language.getString("settings.page.usericons")),
+        LOOK("Look", Language.getString("settings.page.look")),
+        FONTS("Fonts", Language.getString("settings.page.fonts")),
+        CHATCOLORS("Chat Colors", Language.getString("settings.page.chatColors")),
+        MSGCOLORS("Message Colors", Language.getString("settings.page.msgColors")),
+        HIGHLIGHT("Highlight", Language.getString("settings.page.highlight")),
+        IGNORE("Ignore", Language.getString("settings.page.ignore")),
+        HISTORY("History", Language.getString("settings.page.history")),
+        NOTIFICATIONS("Notifications", Language.getString("settings.page.notifications")),
+        SOUNDS("Sounds", Language.getString("settings.page.sound")),
+        AUTOREPLY("Auto Reply", Language.getString("settings.page.autoReply")),
+        USERCOLORS("Usercolors", Language.getString("settings.page.usercolors")),
+        LOGGING("Logging", Language.getString("settings.page.logging")),
+        WINDOW("Window", Language.getString("settings.page.window")),
+        TABS("Tabs", Language.getString("settings.page.tabs")),
+        COMMANDS("Commands", Language.getString("settings.page.commands")),
+        OTHER("Other", Language.getString("settings.page.other")),
+        ADVANCED("Advanced", Language.getString("settings.page.advanced")),
+        HOTKEYS("Hotkeys", Language.getString("settings.page.hotkeys")),
+        COMPLETION("TAB Completion", Language.getString("settings.page.completion")),
+        CHAT("Chat", Language.getString("settings.page.chat")),
+        NAMES("Names", Language.getString("settings.page.names")),
+        MODERATION("Moderation", Language.getString("settings.page.moderation"));
 
-    private String currentlyShown;
+        public final String name;
+        public final String displayName;
+        Page(String name, String displayName) {
+            this.name = name;
+            this.displayName = displayName;
+        }
+
+        @Override
+        public String toString() {
+            return displayName;
+        }
+
+    }
+
+    private Page currentlyShown;
     
     private final CardLayout cardManager;
     private final JPanel cards;
-    private final JList<String> selection;
+    private final JTree selection;
     
     private final LinkLabelListener settingsHelpLinkLabelListener;
     
-    private static final String[] MENU = {
-        PANEL_MAIN,
-        PANEL_MESSAGES,
-        PANEL_MODERATION,
-        PANEL_CHAT,
-        PANEL_EMOTES,
-        PANEL_USERICONS,
-        PANEL_COLORS,
-        PANEL_USERCOLORS,
-        PANEL_NAMES,
-        PANEL_HIGHLIGHT,
-        PANEL_IGNORE,
-        PANEL_AUTOREPLY,
-        PANEL_HISTORY,
-        PANEL_SOUND,
-        PANEL_NOTIFICATIONS,
-        PANEL_LOG,
-        PANEL_WINDOW,
-        PANEL_TABS,
-        PANEL_COMMANDS,
-        PANEL_OTHER,
-        PANEL_ADVANCED,
-        PANEL_HOTKEYS,
-        PANEL_COMPLETION
-    };
+    private final static Map<Page, List<Page>> MENU = new LinkedHashMap<>();
+
+    // Page definition for JTree navigation
+    static {
+        MENU.put(Page.MAIN, Arrays.asList(new Page[]{}));
+        MENU.put(Page.LOOK, Arrays.asList(new Page[]{
+            Page.CHATCOLORS,
+            Page.MSGCOLORS,
+            Page.USERCOLORS,
+            Page.USERICONS,
+            Page.EMOTES,
+            Page.FONTS,
+        }));
+        MENU.put(Page.CHAT, Arrays.asList(new Page[]{
+            Page.MESSAGES,
+            Page.MODERATION,
+            Page.NAMES,
+            Page.HIGHLIGHT,
+            Page.AUTOREPLY,
+            Page.IGNORE,
+            Page.LOGGING,
+        }));
+        MENU.put(Page.WINDOW, Arrays.asList(new Page[]{
+            Page.TABS,
+            Page.NOTIFICATIONS,
+            Page.SOUNDS,
+        }));
+        MENU.put(Page.OTHER, Arrays.asList(new Page[]{
+            Page.COMMANDS,
+            Page.ADVANCED,
+            Page.COMPLETION,
+            Page.HISTORY,
+            Page.HOTKEYS,
+        }));
+    }
 
     public SettingsDialog(final MainGui owner, final Settings settings) {
-        super(owner,"Settings",true);
+        super(owner, Language.getString("settings.title"), true);
         setResizable(false);
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         
@@ -151,6 +185,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
             }
         });
         
+        // For help links on setting pages
         settingsHelpLinkLabelListener = new LinkLabelListener() {
 
             @Override
@@ -163,26 +198,14 @@ public class SettingsDialog extends JDialog implements ActionListener {
         this.owner = owner;
         this.settings = settings;
 
-        /*
-         * Layout
-         */
+        // Layout
         setLayout(new GridBagLayout());
         GridBagConstraints gbc;
 
-        /*
-         * Add to Tabs
-         */
-        //JTabbedPane tabs = new JTabbedPane();
-        selection = new JList<>(MENU);
-        selection.setSelectedIndex(0);
-        selection.setSize(200, 200);
-        Font defaultFont = selection.getFont();
-        selection.setFont(new Font(defaultFont.getFontName(), Font.BOLD, 12));
-        selection.setFixedCellHeight(20);
-        selection.setFixedCellWidth(100);
+        // Create and add tree
+        selection = Tree.createTree(MENU);
+        selection.setSelectionRow(0);
         selection.setBorder(BorderFactory.createEtchedBorder());
-//        selection.setBackground(getBackground());
-//        selection.setForeground(getForeground());
 
         gbc = makeGbc(0,0,1,1);
         gbc.insets = new Insets(10,10,10,3);
@@ -191,43 +214,48 @@ public class SettingsDialog extends JDialog implements ActionListener {
         gbc.weighty = 1;
         add(selection, gbc);
         
+        // Create setting pages, the order here doesn't matter
         cardManager = new CardLayout();
         cards = new JPanel(cardManager);
-        cards.add(new MainSettings(this), PANEL_MAIN);
-        cards.add(new MessageSettings(this), PANEL_MESSAGES);
-        cards.add(new ModerationSettings(this), PANEL_MODERATION);
-        cards.add(new EmoteSettings(this), PANEL_EMOTES);
+        cards.add(new MainSettings(this), Page.MAIN.name);
+        cards.add(new MessageSettings(this), Page.MESSAGES.name);
+        cards.add(new ModerationSettings(this), Page.MODERATION.name);
+        cards.add(new EmoteSettings(this), Page.EMOTES.name);
         imageSettings = new ImageSettings(this);
-        cards.add(imageSettings, PANEL_USERICONS);
-        cards.add(new ColorSettings(this), PANEL_COLORS);
-        cards.add(new HighlightSettings(this), PANEL_HIGHLIGHT);
-        cards.add(new IgnoreSettings(this), PANEL_IGNORE);
-        cards.add(new AutoReplySettings(this), PANEL_AUTOREPLY);
-        cards.add(new HistorySettings(this), PANEL_HISTORY);
-        cards.add(new SoundSettings(this), PANEL_SOUND);
+        cards.add(imageSettings, Page.USERICONS.name);
+        cards.add(new LookSettings(this), Page.LOOK.name);
+        cards.add(new FontSettings(this), Page.FONTS.name);
+        cards.add(new ColorSettings(this, settings), Page.CHATCOLORS.name);
+        cards.add(new HighlightSettings(this), Page.HIGHLIGHT.name);
+        cards.add(new AutoReplySettings(this), Page.AUTOREPLY.name);
+        cards.add(new IgnoreSettings(this), Page.IGNORE.name);
+        msgColorSettings = new MsgColorSettings(this);
+        cards.add(msgColorSettings, Page.MSGCOLORS.name);
+        cards.add(new HistorySettings(this), Page.HISTORY.name);
+        cards.add(new SoundSettings(this), Page.SOUNDS.name);
         notificationSettings = new NotificationSettings(this, settings);
-        cards.add(notificationSettings, PANEL_NOTIFICATIONS);
+        cards.add(notificationSettings, Page.NOTIFICATIONS.name);
         usercolorSettings = new UsercolorSettings(this);
-        cards.add(usercolorSettings, PANEL_USERCOLORS);
-        cards.add(new LogSettings(this), PANEL_LOG);
-        cards.add(new WindowSettings(this), PANEL_WINDOW);
-        cards.add(new TabSettings(this), PANEL_TABS);
-        cards.add(new CommandSettings(this), PANEL_COMMANDS);
-        cards.add(new OtherSettings(this), PANEL_OTHER);
-        cards.add(new AdvancedSettings(this), PANEL_ADVANCED);
+        cards.add(usercolorSettings, Page.USERCOLORS.name);
+        cards.add(new LogSettings(this), Page.LOGGING.name);
+        cards.add(new WindowSettings(this), Page.WINDOW.name);
+        cards.add(new TabSettings(this), Page.TABS.name);
+        cards.add(new CommandSettings(this), Page.COMMANDS.name);
+        cards.add(new OtherSettings(this), Page.OTHER.name);
+        cards.add(new AdvancedSettings(this), Page.ADVANCED.name);
         hotkeySettings = new HotkeySettings(this);
-        cards.add(hotkeySettings, PANEL_HOTKEYS);
-        cards.add(new CompletionSettings(this), PANEL_COMPLETION);
-        cards.add(new ChatSettings(this), PANEL_CHAT);
+        cards.add(hotkeySettings, Page.HOTKEYS.name);
+        cards.add(new CompletionSettings(this), Page.COMPLETION.name);
+        cards.add(new ChatSettings(this), Page.CHAT.name);
         nameSettings = new NameSettings(this);
-        cards.add(nameSettings, PANEL_NAMES);
+        cards.add(nameSettings, Page.NAMES.name);
 
-        currentlyShown = PANEL_MAIN;
-        selection.addListSelectionListener(new ListSelectionListener() {
-
-            @Override
-            public void valueChanged(ListSelectionEvent e) {
-                showPanel(selection.getSelectedValue());
+        // Track current settings page
+        currentlyShown = Page.MAIN;
+        selection.addTreeSelectionListener(e -> {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) selection.getLastSelectedPathComponent();
+            if (node != null) {
+                showPanel((Page)node.getUserObject());
             }
         });
         
@@ -246,7 +274,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
 
             @Override
             public void linkClicked(String type, String ref) {
-                owner.openHelp("help-settings.html", currentlyShown);
+                owner.openHelp("help-settings.html", currentlyShown.name);
             }
         }), gbc);
         
@@ -256,15 +284,21 @@ public class SettingsDialog extends JDialog implements ActionListener {
         gbc.weightx = 0.5;
         gbc.anchor = GridBagConstraints.EAST;
         gbc.insets = new Insets(4,3,8,8);
+        gbc.ipadx = 16;
+        gbc.ipady = 4;
+        ok.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
         add(ok,gbc);
         cancel.setMnemonic(KeyEvent.VK_C);
         gbc = makeGbc(2,2,1,1);
         gbc.weightx = 0;
         gbc.anchor = GridBagConstraints.WEST;
         gbc.insets = new Insets(4,3,8,8);
+        gbc.ipadx = 16;
+        gbc.ipady = 4;
+        cancel.setMargin(GuiUtil.SMALL_BUTTON_INSETS);
         add(cancel,gbc);
         
-        // Listeners
+        // Button Listeners
         ok.addActionListener(this);
         cancel.addActionListener(this);
 
@@ -292,7 +326,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
     }
     
     private void stuffBasedOnPanel() {
-        if (currentlyShown.equals(PANEL_HOTKEYS)) {
+        if (currentlyShown.equals(Page.HOTKEYS)) {
             owner.hotkeyManager.setEnabled(false);
         }
     }
@@ -303,23 +337,23 @@ public class SettingsDialog extends JDialog implements ActionListener {
             @Override
             public void run() {
                 if (action.equals("editUsercolorItem")) {
-                    showPanel(PANEL_USERCOLORS);
+                    showPanel(Page.USERCOLORS);
                     usercolorSettings.editItem(parameter);
                 } else if (action.equals("editCustomNameItem")) {
-                    showPanel(PANEL_NAMES);
+                    showPanel(Page.NAMES);
                     nameSettings.editCustomName(parameter);
                 } else if (action.equals("addUsericonOfBadgeType")) {
-                    showPanel(PANEL_USERICONS);
+                    showPanel(Page.USERICONS);
                     imageSettings.addUsericonOfBadgeType(parameter);
                 }
             }
         });
     }
 
-    private void showPanel(String showCard) {
-        cardManager.show(cards, showCard);
-        currentlyShown = showCard;
-        selection.setSelectedValue(showCard, true);
+    private void showPanel(Page page) {
+        cardManager.show(cards, page.name);
+        currentlyShown = page;
+        Tree.setSelected(selection, page);
         stuffBasedOnPanel();
     }
     
@@ -332,7 +366,9 @@ public class SettingsDialog extends JDialog implements ActionListener {
         loadBooleanSettings();
         loadListSettings();
         loadMapSettings();
+        updateBackgroundColor();
         usercolorSettings.setData(owner.getUsercolorData());
+        msgColorSettings.setData(owner.getMsgColorData());
         imageSettings.setData(owner.getUsericonData());
         imageSettings.setTwitchBadgeTypes(owner.getTwitchBadgeTypes());
         hotkeySettings.setData(owner.hotkeyManager.getActionsMap(),
@@ -340,6 +376,12 @@ public class SettingsDialog extends JDialog implements ActionListener {
         notificationSettings.setData(owner.getNotificationData());
     }
     
+    public void updateBackgroundColor() {
+        Color color = HtmlColors.decode(getStringSetting("backgroundColor"));
+        usercolorSettings.setBackgroundColor(color);
+        msgColorSettings.setBackgroundColor(color);
+    }
+
     /**
      * Loads all settings of type String
      */
@@ -401,6 +443,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
         saveListSettings();
         saveMapSettings();
         owner.setUsercolorData(usercolorSettings.getData());
+        owner.setMsgColorData(msgColorSettings.getData());
         owner.setUsericonData(imageSettings.getData());
         owner.hotkeyManager.setData(hotkeySettings.getData());
         owner.setNotificationData(notificationSettings.getData());
@@ -528,7 +571,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
         gbc.gridy = y;
         gbc.gridwidth = w;
         gbc.gridheight = h;
-        gbc.insets = new Insets(1,18,1,5);
+        gbc.insets = new Insets(1,18,2,5);
         gbc.anchor = anchor;
         return gbc;
     }
@@ -537,6 +580,20 @@ public class SettingsDialog extends JDialog implements ActionListener {
         booleanSettings.put(name, setting);
     }
     
+    /**
+     * Add boolean setting where the description is in the Strings file as
+     * "settings.boolean.[settingName]" and the optional tooltip as
+     * "settings.boolean.[settingName].tip".
+     *
+     * @param name The setting name
+     * @return
+     */
+    protected JCheckBox addSimpleBooleanSetting(String name) {
+        return addSimpleBooleanSetting(name,
+                Language.getString("settings.boolean."+name),
+                Language.getString("settings.boolean."+name+".tip", false));
+    }
+
     protected JCheckBox addSimpleBooleanSetting(String name, String description, String tooltipText) {
         SimpleBooleanSetting result = new SimpleBooleanSetting(description, tooltipText);
         booleanSettings.put(name,result);
@@ -731,6 +788,11 @@ public class SettingsDialog extends JDialog implements ActionListener {
     
     private void cancel() {
         Sound.setDeviceName(settings.getString("soundDevice"));
+        if (!settings.getString("laf").equals(stringSettings.get("laf").getSettingValue())
+                || !settings.getString("lafTheme").equals(stringSettings.get("lafTheme").getSettingValue())) {
+            LaF.setLookAndFeel(settings.getString("laf"), settings.getString("lafTheme"));
+            LaF.updateLookAndFeel();
+        }
         close();
     }
     

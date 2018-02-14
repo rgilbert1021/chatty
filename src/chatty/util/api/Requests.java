@@ -5,6 +5,7 @@ import chatty.Chatty;
 import chatty.Helper;
 import chatty.util.DateTime;
 import chatty.util.StringUtil;
+import chatty.util.api.CommunitiesManager.CommunitiesListener;
 import chatty.util.api.CommunitiesManager.Community;
 import chatty.util.api.CommunitiesManager.CommunityListener;
 import chatty.util.api.CommunitiesManager.CommunityPutListener;
@@ -14,8 +15,8 @@ import chatty.util.api.TwitchApiRequest.TwitchApiRequestResult;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -267,17 +268,21 @@ public class Requests {
     }
     
     public void getCommunityByName(String name, CommunityListener listener) {
-        String url = "https://api.twitch.tv/kraken/communities?name="+name;
-        TwitchApiRequest request = new TwitchApiRequest(url, "v5");
-        execute(request, r -> {
-            Community result = CommunitiesManager.parse(r.text);
-            if (r.responseCode == 404) {
-                listener.received(null, "Community not found.");
-            } else {
-                api.communitiesManager.addCommunity(result);
-                listener.received(result, null);
-            }
-        });
+        try {
+            String url = "https://api.twitch.tv/kraken/communities?name="+URLEncoder.encode(name, "UTF-8");
+            TwitchApiRequest request = new TwitchApiRequest(url, "v5");
+            execute(request, r -> {
+                Community result = CommunitiesManager.parse(r.text);
+                if (r.responseCode == 404) {
+                    listener.received(null, "Community not found.");
+                } else {
+                    api.communitiesManager.addCommunity(result);
+                    listener.received(result, null);
+                }
+            });
+        } catch (UnsupportedEncodingException ex) {
+            Logger.getLogger(Requests.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
     
     public void getCommunityById(String id, CommunityListener listener) {
@@ -294,11 +299,15 @@ public class Requests {
         });
     }
     
-    public void setCommunity(String userId, String communityId, String token, CommunityPutListener listener) {
-        String url = "https://api.twitch.tv/kraken/channels/"+userId+"/community/"+communityId;
+    public void setCommunities(String userId, List<String> communityIds,
+            String token, CommunityPutListener listener) {
+        String url = "https://api.twitch.tv/kraken/channels/"+userId+"/communities";
         TwitchApiRequest request = new TwitchApiRequest(url, "v5");
-        request.setRequestType("PUT");
         request.setToken(token);
+        request.setContentType("application/json");
+        JSONObject data = new JSONObject();
+        data.put("community_ids", communityIds);
+        request.setData(data.toJSONString(), "PUT");
         execute(request, r -> {
             if (r.responseCode == 204) {
                 listener.result(null);
@@ -308,32 +317,20 @@ public class Requests {
         });
     }
     
-    public void removeCommunity(String userId, String token, CommunityPutListener listener) {
-        String url = "https://api.twitch.tv/kraken/channels/"+userId+"/community";
-        TwitchApiRequest request = new TwitchApiRequest(url, "v5");
-        request.setRequestType("DELETE");
-        request.setToken(token);
-        execute(request, r -> {
-            if (r.responseCode == 204) {
-                listener.result(null);
-            } else {
-                listener.result("Error");
-            }
-        });
-    }
-    
-    public void getCommunity(String userId, CommunityListener listener) {
-        String url = "https://api.twitch.tv/kraken/channels/"+userId+"/community";
+    public void getCommunities(String userId, CommunitiesListener listener) {
+        String url = "https://api.twitch.tv/kraken/channels/"+userId+"/communities";
         TwitchApiRequest request = new TwitchApiRequest(url, "v5");
         execute(request, r -> {
             if (r.responseCode == 204 || r.responseCode == 404) { // 404 just in case Twitch changes it
-                listener.received(Community.EMPTY, null);
+                listener.received(null, null);
             } else {
-                Community result = CommunitiesManager.parse(r.text);
+                List<Community> result = CommunitiesManager.parseCommunities(r.text);
                 if (result == null) {
-                    listener.received(null, "Community error");
+                    listener.received(null, "Communities error");
                 } else {
-                    api.communitiesManager.addCommunity(result);
+                    for (Community c : result) {
+                        api.communitiesManager.addCommunity(c);
+                    }
                     listener.received(result, null);
                 }
             }
@@ -475,6 +472,26 @@ public class Requests {
                     api.emoticonManager.dataReceived(r.text, forcedUpdate);
                 });
             }
+            //requestResult(REQUEST_TYPE_EMOTICONS,"")
+    }
+    
+    public void requestEmotesets(Set<Integer> emotesets) {
+        if (emotesets != null && !emotesets.isEmpty()) {
+            String emotesetsParam = StringUtil.join(emotesets, ",");
+            String url = "https://api.twitch.tv/kraken/chat/emoticon_images?emotesets="+emotesetsParam;
+            if (attemptRequest(url)) {
+                TwitchApiRequest request = new TwitchApiRequest(url, "v5");
+                execute(request, r -> {
+                    Set<Emoticon> result = EmoticonManager.parseEmoticonSets(r.text);
+                    if (result != null) {
+                        listener.receivedEmoticons(result);
+                    } else {
+                        api.emoticonManager2.addError(emotesets);
+                    }
+                });
+            }
+        }
+        
             //requestResult(REQUEST_TYPE_EMOTICONS,"")
     }
 

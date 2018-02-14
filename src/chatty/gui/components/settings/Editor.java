@@ -4,12 +4,15 @@ package chatty.gui.components.settings;
 import chatty.gui.GuiUtil;
 import chatty.gui.components.LinkLabel;
 import chatty.gui.components.LinkLabelListener;
+import chatty.lang.Language;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -41,10 +44,10 @@ public class Editor {
     private final JDialog dialog;
     private final JLabel label;
     private final JTextArea input;
-    private final JButton okButton = new JButton("Save");
-    private final JButton cancelButton = new JButton("Cancel");
-    private final JButton testButton = new JButton("Test");
-    private final JToggleButton toggleInfoButton = new JToggleButton("Help");
+    private final JButton okButton = new JButton(Language.getString("dialog.button.save"));
+    private final JButton cancelButton = new JButton(Language.getString("dialog.button.cancel"));
+    private final JButton testButton = new JButton(Language.getString("dialog.button.test"));
+    private final JToggleButton toggleInfoButton = new JToggleButton(Language.getString("dialog.button.help"));
     private final Window parent;
     private final LinkLabel info;
     
@@ -162,7 +165,11 @@ public class Editor {
 
         // Set initial size, now also based on the preset value
         dialog.pack();
-        dialog.setSize(dialog.getPreferredSize());
+        Dimension p = dialog.getPreferredSize();
+        Rectangle screen = parent.getGraphicsConfiguration().getBounds();
+        if (p.height > screen.height / 2) {
+            dialog.setSize(p.width, screen.height / 2);
+        }
         
         dialog.setLocationRelativeTo(parent);
         dialog.setVisible(true);
@@ -202,7 +209,7 @@ public class Editor {
     
     /**
      * Set whether to allow linebrekas in the value. Otherwise linebreaks are
-     * filtered out when editing an replaced by a space. Default is false.
+     * filtered out when editing and replaced by a space. Default is false.
      * 
      * @param allow true to allow linebreaks
      */
@@ -262,7 +269,10 @@ public class Editor {
                 dialog.pack();
             } else if (e.getSource() == testButton) {
                 if (tester != null) {
-                    tester.test(testButton, 0, testButton.getHeight(), input.getText());
+                    String changed = tester.test(dialog, testButton, 0, testButton.getHeight(), input.getText());
+                    if (changed != null) {
+                        input.setText(changed);
+                    }
                 }
             }
             
@@ -290,8 +300,14 @@ public class Editor {
      * is bigger than the current size.
      */
     private void adjustSize() {
-        if (bigger(dialog.getPreferredSize(), dialog.getSize())) {
-            dialog.pack();
+        if (dialog.isVisible()) {
+            Dimension p = dialog.getPreferredSize();
+            Point bottomRight = dialog.getLocationOnScreen();
+            bottomRight.translate(p.width, p.height);
+            if (bigger(p, dialog.getSize())
+                    && GuiUtil.isPointOnScreen(bottomRight)) {
+                dialog.pack();
+            }
         }
     }
 
@@ -328,7 +344,7 @@ public class Editor {
     }
     
     public interface Tester {
-        public void test(Component component, int x, int y, String value);
+        public String test(Window parent, Component component, int x, int y, String value);
     }
 
 }

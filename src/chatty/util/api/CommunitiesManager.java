@@ -2,10 +2,14 @@
 package chatty.util.api;
 
 import chatty.util.JSONUtil;
+import chatty.util.StringUtil;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Logger;
@@ -25,6 +29,8 @@ public class CommunitiesManager {
     
     private final Set<Community> withInfo = new HashSet<>();
     private final Set<Community> all = new HashSet<>();
+    
+    private final Map<String, List<CommunityListener>> listeners = new HashMap<>();
     
     private final Set<String> error = Collections.synchronizedSet(new HashSet<>());
     
@@ -50,21 +56,56 @@ public class CommunitiesManager {
         return null;
     }
     
-    public synchronized void getById(String id, CommunityListener listener) {
+    public void getById(String id, CommunityListener listener) {
         Community c = getCachedById(id);
         if (c != null) {
             listener.received(c, null);
         } else {
             // Not cached, request
             if (!error.contains(id)) {
-                api.requests.getCommunityById(id, (r, e) -> {
-                    if (r == null) {
-                        error.add(id);
+                synchronized (this) {
+                    if (!requestPending(id)) {
+                        addListener(id, listener);
+                        api.requests.getCommunityById(id, (r, e) -> {
+                            if (r == null) {
+                                error.add(id);
+                            }
+                            informListeners(id, r, e);
+                        });
+                    } else {
+                        addListener(id, listener);
                     }
-                    listener.received(r, e);
-                });
+                }
+            } else {
+                listener.received(null, "Error (*)");
             }
         }
+    }
+    
+    private synchronized void addListener(String id, CommunityListener listener) {
+        if (!listeners.containsKey(id)) {
+            listeners.put(id, new ArrayList<>());
+        }
+        listeners.get(id).add(listener);
+    }
+    
+    private synchronized boolean requestPending(String id) {
+        return listeners.containsKey(id);
+    }
+    
+    private void informListeners(String id, Community r, String e) {
+        for (CommunityListener l : getListeners(id)) {
+            l.received(r, e);
+        }
+    }
+    
+    private synchronized List<CommunityListener> getListeners(String id) {
+        List<CommunityListener> result = new ArrayList<>();
+        if (listeners.containsKey(id)) {
+            result = new ArrayList<>(listeners.get(id));
+            listeners.remove(id);
+        }
+        return result;
     }
     
     /**
@@ -84,25 +125,42 @@ public class CommunitiesManager {
     
     public static class Community implements Comparable<Community> {
         
-        public static final Community EMPTY = new Community(null, "");
+        public static final Community EMPTY = new Community(null, "", "");
         
         private final String name;
+        private final String display_name;
         private final String id;
         private final String summary;
         private final String rules;
         
-        public Community(String id, String name, String summary, String rules) {
-            this.name = name;
+        public Community(String id, String name, String display_name, String summary, String rules) {
+            this.name = StringUtil.toLowerCase(name);
+            this.display_name = display_name;
             this.id = id;
             this.summary = summary;
             this.rules = rules;
         }
         
+        public Community(String id, String name, String display_name) {
+            this(id, name, display_name, null, null);
+        }
+        
         public Community(String id, String name) {
-            this(id, name, null, null);
+            this(id, name, name, null, null);
         }
         
         public String getName() {
+            return name;
+        }
+        
+        public String getDisplayName() {
+            return display_name;
+        }
+        
+        public String getCapitalizedName() {
+            if (display_name.equalsIgnoreCase(name)) {
+                return display_name;
+            }
             return name;
         }
         
@@ -139,7 +197,7 @@ public class CommunitiesManager {
         
         @Override
         public String toString() {
-            return name;
+            return display_name;
         }
         
         @Override
@@ -190,6 +248,10 @@ public class CommunitiesManager {
         public void received(Community community, String error);
     }
     
+    public interface CommunitiesListener {
+        public void received(List<Community> communities, String error);
+    }
+    
     public interface CommunityTopListener {
         public void received(Collection<Community> communities);
     }
@@ -213,8 +275,9 @@ public class CommunitiesManager {
                 JSONObject community = (JSONObject)o;
                 String id = JSONUtil.getString(community, "_id");
                 String name = JSONUtil.getString(community, "name");
+                String display_name = JSONUtil.getString(community, "display_name");
                 if (id != null && name != null) {
-                    result.add(new Community(id, name));
+                    result.add(new Community(id, name, display_name));
                 }
             }
         } catch (Exception ex) {
@@ -230,15 +293,46 @@ public class CommunitiesManager {
         try {
             JSONParser parser = new JSONParser();
             JSONObject community = (JSONObject) parser.parse(text);
-            String id = JSONUtil.getString(community, "_id");
-            String name = JSONUtil.getString(community, "name");
-            String summary = JSONUtil.getString(community, "description_html");
-            String rules = JSONUtil.getString(community, "rules_html");
-            if (id != null && name != null) {
-                return new Community(id, name, summary, rules);
-            }
+            return getCommunity(community);
         } catch (Exception ex) {
             LOGGER.warning("Error parsing Community: "+ex);
+        }
+        return null;
+    }
+    
+    public static List<Community> parseCommunities(String text) {
+        if (text == null) {
+            return null;
+        }
+        try {
+            List<Community> result = new ArrayList<>();
+            
+            JSONParser parser = new JSONParser();
+            JSONObject root = (JSONObject) parser.parse(text);
+            JSONArray list = (JSONArray) root.get("communities");
+            for (Object obj : list) {
+                if (obj instanceof JSONObject) {
+                    Community c = getCommunity((JSONObject)obj);
+                    if (c != null) {
+                        result.add(c);
+                    }
+                }
+            }
+            return result;
+        } catch (Exception ex) {
+            LOGGER.warning("Error parsing Communities: "+ex);
+        }
+        return null;
+    }
+    
+    private static Community getCommunity(JSONObject data) {
+        String id = JSONUtil.getString(data, "_id");
+        String name = JSONUtil.getString(data, "name");
+        String display_name = JSONUtil.getString(data, "display_name");
+        String summary = JSONUtil.getString(data, "description_html");
+        String rules = JSONUtil.getString(data, "rules_html");
+        if (id != null && name != null) {
+            return new Community(id, name, display_name, summary, rules);
         }
         return null;
     }

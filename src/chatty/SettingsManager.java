@@ -6,6 +6,7 @@ import chatty.gui.WindowStateManager;
 import chatty.gui.notifications.Notification;
 import chatty.util.BackupManager;
 import chatty.util.DateTime;
+import chatty.util.StringUtil;
 import chatty.util.hotkeys.Hotkey;
 import chatty.util.settings.Setting;
 import chatty.util.settings.Settings;
@@ -25,7 +26,7 @@ public class SettingsManager {
     private final Settings settings;
     private final BackupManager backup;
     
-    private final List<DefaultHotkey> hotkeys = new ArrayList<>();
+    private final List<DefaultHotkey> defaultHotkeys = new ArrayList<>();
     
     public static final long DISPLAY_NAMES_MODE_BOTH = 0;
     public static final long DISPLAY_NAMES_MODE_CAPITALIZED = 1;
@@ -104,17 +105,19 @@ public class SettingsManager {
         addDefaultHotkey("0.7.3", "dialog.toggleEmotes", "ctrl E");
         addDefaultHotkey("0.7.3", "dialog.search", "ctrl F");
         addDefaultHotkey("0.7.3", "dialog.joinChannel", "ctrl J");
-        addDefaultHotkey("0.7.3", "window.toggleUserlist", "shift F10");
-        addDefaultHotkey("0.7.3", "window.toggleInput", "ctrl F10");
-        addDefaultHotkey("0.7.3", "window.toggleCompact", "F10");
-        addDefaultHotkey("0.7.3", "window.toggleCompactMaximized", "F11");
+        addDefaultHotkeyAppWide("0.7.3", "window.toggleUserlist", "shift F10");
+        addDefaultHotkeyAppWide("0.7.3", "window.toggleInput", "ctrl F10");
+        addDefaultHotkeyAppWide("0.7.3", "window.toggleCompact", "F10");
+        addDefaultHotkeyAppWide("0.7.3", "window.toggleCompactMaximized", "F11");
         addDefaultHotkey("0.7.3", "tabs.close", "ctrl W");
         addDefaultHotkeyAppWide("0.7.3", "tabs.next", "ctrl TAB");
         addDefaultHotkeyAppWide("0.7.3", "tabs.previous", "ctrl shift TAB");
         addDefaultHotkey("0.7.3", "selection.toggle", "ctrl SPACE");
         addDefaultHotkey("0.7.3", "selection.toggle", "ctrl S");
+        addDefaultHotkeyAppWide("0.9b1", "about", "F1");
         settings.addList("hotkeys", getDefaultHotkeySettingValue(), Setting.LIST);
         settings.addBoolean("globalHotkeysEnabled", true);
+        settings.addBoolean("inputHistoryMultirowRequireCtrl", true);
         
 
         //===========
@@ -174,6 +177,10 @@ public class SettingsManager {
 
         settings.addBoolean("ontop", false);
         settings.addString("laf","default");
+        settings.addString("lafTheme","Default");
+        settings.addMap("lafCustomTheme", new HashMap<>(), Setting.STRING);
+        
+        settings.addString("language", "");
         
         settings.addLong("dialogFontSize", -1);
 
@@ -181,6 +188,7 @@ public class SettingsManager {
         settings.addString("font","Consolas");
         settings.addLong("fontSize",14);
         settings.addString("inputFont", "Dialog 14");
+        settings.addString("userlistFont", "Dialog Bold 12");
         settings.addLong("lineSpacing", 2);
         settings.addLong("paragraphSpacing", 6);
         settings.addString("timestamp","[HH:mm]");
@@ -208,6 +216,7 @@ public class SettingsManager {
         settings.addList("favoriteEmotes", new ArrayList(), Setting.LIST);
         
         settings.addString("emoji", "twemoji");
+        settings.addBoolean("emojiReplace", true);
         settings.addString("cheersType", "static");
 
         settings.addBoolean("usericonsEnabled",true);
@@ -229,12 +238,17 @@ public class SettingsManager {
         settings.addString("backgroundColor","#FAFAFA");
         settings.addString("infoColor","#001480");
         settings.addString("compactColor","#A0A0A0");
-        settings.addString("inputBackgroundColor","#FFFFFF");
-        settings.addString("inputForegroundColor","#000000");
-        settings.addString("highlightColor","#FF0000");
+        settings.addString("inputBackgroundColor","White");
+        settings.addString("inputForegroundColor","Black");
+        settings.addString("highlightColor","Red");
         settings.addString("searchResultColor", "LightYellow");
         settings.addString("searchResultColor2", "#FFFF80");
         settings.addBoolean("colorCorrection", true);
+        settings.addList("colorPresets", new ArrayList<>(), Setting.LIST);
+        
+        // Message Colors
+        settings.addBoolean("msgColorsEnabled", false);
+        settings.addList("msgColors", new LinkedList(), Setting.STRING);
         
         // Usercolors
         settings.addBoolean("customUsercolors", false);
@@ -266,6 +280,8 @@ public class SettingsManager {
         settings.addString("userContextMenu", "");
         settings.addString("channelContextMenu", "");
         settings.addString("streamsContextMenu", "");
+        
+        settings.addBoolean("closeUserDialogOnAction", true);
 
         // History / Favorites
         settings.addMap("channelHistory",new TreeMap(), Setting.LONG);
@@ -345,7 +361,7 @@ public class SettingsManager {
         // Tabs
         settings.addString("tabOrder", "normal");
         settings.addBoolean("tabsMwheelScrolling", false);
-        settings.addBoolean("tabsMwheelScrollingAnywhere", false);
+        settings.addBoolean("tabsMwheelScrollingAnywhere", true);
         settings.addString("tabsPlacement", "top");
         settings.addString("tabsLayout", "wrap");
 
@@ -354,11 +370,13 @@ public class SettingsManager {
         settings.addLong("userlistWidth", 120);
         settings.addLong("userlistMinWidth", 0);
         settings.addBoolean("userlistEnabled", true);
+        settings.addBoolean("inputEnabled", true);
         settings.addLong("bufferSize", 500);
         settings.addMap("bufferSizes", new HashMap<>(), Setting.LONG);
 
         settings.addString("liveStreamsSorting", "recent");
         settings.addLong("historyRange", 0);
+        settings.addBoolean("historyVerticalZoom", false);
 
         //=======
         // Sounds
@@ -407,6 +425,7 @@ public class SettingsManager {
         settings.addLong("nMaxQueueSize", 4);
         settings.addBoolean("nActivity", false);
         settings.addLong("nActivityTime", 10);
+        settings.addString("nCommand", "");
 
         settings.addList("notifications", getDefaultNotificationSettingValue(), Setting.LIST);
         settings.addList("nColorPresets", new ArrayList<>(), Setting.LIST);
@@ -491,6 +510,7 @@ public class SettingsManager {
         settings.addBoolean("logViewerstats", true);
         settings.addBoolean("logViewercount", false);
         settings.addBoolean("logModAction", true);
+        settings.addBoolean("logIgnored", true);
         settings.addList("logWhitelist",new ArrayList(), Setting.STRING);
         settings.addList("logBlacklist",new ArrayList(), Setting.STRING);
         settings.addString("logPath", "");
@@ -508,6 +528,8 @@ public class SettingsManager {
         settings.addBoolean("completionAllNameTypes", true);
         settings.addBoolean("completionPreferUsernames", true);
         settings.addBoolean("completionAllNameTypesRestriction", true);
+        settings.addString("completionTab", "names");
+        settings.addString("completionTab2", "emotes");
 
         // Stream Chat
         settings.addLong("streamChatMessageTimeout", -1);
@@ -638,7 +660,7 @@ public class SettingsManager {
      */
     void overrideSettings() {
         settings.setBoolean("ignoreJoinsParts", false);
-        if (updatedFromBefore("0.7.2")) {
+        if (switchedFromVersionBefore("0.7.2")) {
             String value = settings.getString("timeoutButtons");
             if (value.equals("5,2m,10m,30m")) {
                 /**
@@ -647,8 +669,8 @@ public class SettingsManager {
                  */
                 settings.setString("timeoutButtons", null);
                 LOGGER.warning("Updated timeoutButtons setting to new default");
-            } else if (!value.toLowerCase(Locale.ENGLISH).contains("/ban") &&
-                    !value.toLowerCase(Locale.ENGLISH).contains("/unban")) {
+            } else if (!StringUtil.toLowerCase(value).contains("/ban") &&
+                    !StringUtil.toLowerCase(value).contains("/unban")) {
                 /**
                  * Setting wasn't on the old default value, but it doesn't
                  * contain /Ban or /Unban, so add those to the current
@@ -659,12 +681,12 @@ public class SettingsManager {
                 LOGGER.warning("Added /Ban,/Unban to timeoutButtons setting, now: "+newValue);
             }
         }
-        if (updatedFromBefore("0.8.1")) {
+        if (switchedFromVersionBefore("0.8.1")) {
             if (settings.getString("portDefault").equals("6667,80")) {
                 settings.setString("portDefault", "6667,443");
             }
         }
-        if (updatedFromBefore("0.8.2")) {
+        if (switchedFromVersionBefore("0.8.2")) {
             if (settings.getString("serverDefault").equals("irc.twitch.tv")) {
                 settings.setString("serverDefault", "irc.chat.twitch.tv");
             }
@@ -673,18 +695,28 @@ public class SettingsManager {
             }
             settings.setAdd("securedPorts", (long)443);
         }
-        if (updatedFromBefore("0.8.4")) {
+        if (switchedFromVersionBefore("0.8.4")) {
             settings.setBoolean("ircv3CapitalizedNames", true);
         }
-        if (updatedFromBefore("0.8.5b4")) {
+        if (switchedFromVersionBefore("0.8.5b4")) {
             String currentValue = settings.getString("timeoutButtons");
-            if (!currentValue.toLowerCase().contains("/modunmod")) {
+            if (!StringUtil.toLowerCase(currentValue).contains("/modunmod")) {
                 settings.setString("timeoutButtons", currentValue+"\n/ModUnmod");
             }
         }
-        if (updatedFromBefore("0.8.6b3")) {
+        if (switchedFromVersionBefore("0.8.6b3")) {
             settings.putList("notifications", getDefaultNotificationSettingValue());
         }
+        if (switchedFromVersionBefore("0.8.7b1")) {
+            String currentValue = settings.getString("timeoutButtons");
+            if (!StringUtil.toLowerCase(currentValue).contains("/automod_approve")) {
+                settings.setString("timeoutButtons", currentValue + "\n\n"
+                        + "@AutoMod\n"
+                        + ".Approve=/Automod_approve\n"
+                        + ".Deny=/Automod_deny");
+            }
+        }
+        overrideHotkeySettings();
     }
     
     /**
@@ -700,7 +732,7 @@ public class SettingsManager {
      * @param version The version to check against
      * @return true if the given version is greater than the current version
      */
-    private boolean updatedFromBefore(String version) {
+    private boolean switchedFromVersionBefore(String version) {
         return Version.compareVersions(settings.getString("currentVersion"), version) == 1;
     }
     
@@ -721,21 +753,46 @@ public class SettingsManager {
     }
     
     private void addDefaultHotkey(String version, String id, String hotkey) {
-        hotkeys.add(new DefaultHotkey(version,
+        defaultHotkeys.add(new DefaultHotkey(version,
                 Arrays.asList(new Object[]{id, hotkey})));
     }
     
     private void addDefaultHotkeyAppWide(String version, String id, String hotkey) {
-        hotkeys.add(new DefaultHotkey(version,
+        defaultHotkeys.add(new DefaultHotkey(version,
                 Arrays.asList(new Object[]{id, hotkey, Hotkey.Type.APPLICATION.id})));
     }
     
     private List<List> getDefaultHotkeySettingValue() {
         List<List> data = new ArrayList<>();
-        for (DefaultHotkey hotkey : hotkeys) {
+        for (DefaultHotkey hotkey : defaultHotkeys) {
             data.add(hotkey.data);
         }
         return data;
+    }
+    
+    /**
+     * When settings have already been loaded from file, add some more default
+     * ones if previous version older than specified with the hotkey.
+     */
+    private void overrideHotkeySettings() {
+        for (DefaultHotkey hotkey : defaultHotkeys) {
+            // Check version of when the default hotkey was added
+            if (switchedFromVersionBefore(hotkey.version)) {
+                List<List> setting = settings.getList("hotkeys");
+                Iterator<List> it = setting.iterator();
+                // Remove hotkey if already in setting
+                while (it.hasNext()) {
+                    // Compare hotkey ids
+                    if (it.next().get(0).equals(hotkey.data.get(0))) {
+                        it.remove();
+                    }
+                }
+                // Add hotkey with default settings
+                setting.add(hotkey.data);
+                LOGGER.info("Overriding hotkey setting: "+hotkey.data);
+                settings.putList("hotkeys", setting);
+            }
+        }
     }
     
     private static class DefaultHotkey {

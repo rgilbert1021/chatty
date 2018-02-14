@@ -8,6 +8,7 @@ import chatty.gui.components.menus.TestContextMenu;
 import chatty.util.commands.CustomCommand;
 import java.awt.Component;
 import java.awt.GridBagConstraints;
+import java.awt.Window;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -25,7 +26,7 @@ public class CommandSettings extends SettingsPanel {
             + "Add Custom Commands as <code>/Command</code> (no parameters), "
             + "separated by spaces (several per line), <code>//Command</code> "
             + "to put into submenu, <code>|</code> (vertical bar) to add "
-            + "separator."
+            + "separator (or <code>-</code> on it's own line)."
             + "</li>"
             + "<li>"
             + "Add timeouts by specifying a number (<code>30</code> interpreted "
@@ -88,7 +89,7 @@ public class CommandSettings extends SettingsPanel {
         if (type.equals("userDialog")) {
             info += "<p><em>Note:</em> You can also add [help-commands:shortcuts shortcuts] in brackets, "
                     + "which can be triggered when the User Dialog has focus "
-                    + "(<code>/Ban[B]</code>).";
+                    + "(<code>/Ban[B]</code> or <code>Slap[B]=/me ..</code>).";
         }
         
         info += INFO_MORE;
@@ -145,13 +146,14 @@ public class CommandSettings extends SettingsPanel {
         items.setTester(new Editor.Tester() {
 
             @Override
-            public void test(Component component, int x, int y, String value) {
+            public String test(Window parent, Component component, int x, int y, String value) {
                 CustomCommand command = null;
                 String[] split = value.split(" ", 2);
                 if (split.length == 2) {
                     command = CustomCommand.parse(split[1].trim());
                 }
                 showCommandInfoPopup(component, command);
+                return null;
             }
         });
         items.setInfo(INFO_COMMANDS);
@@ -166,9 +168,10 @@ public class CommandSettings extends SettingsPanel {
         Editor.Tester menuTester = new Editor.Tester() {
 
             @Override
-            public void test(Component component, int x, int y, String value) {
+            public String test(Window parent, Component component, int x, int y, String value) {
                 ContextMenu m = new TestContextMenu(value);
                 m.show(component, x, y);
+                return null;
             }
         };
         
@@ -218,11 +221,18 @@ public class CommandSettings extends SettingsPanel {
         if (command == null) {
             message += "No command.";
         } else if (command.hasError()) {
-            message += Helper.htmlspecialchars_encode(command.getError());
+            message += "<p style='font-family:monospaced;'>"
+                    + "Error: "+formatCommandInfo(command.getError())+"</p>";
         } else {
-            message += Helper.htmlspecialchars_encode(command.toString());
+            message += formatCommandInfo(command.toString());
         }
-        GuiUtil.showNonModalMessage(parent, "Custom Command", message, JOptionPane.INFORMATION_MESSAGE, true);
+        GuiUtil.showNonModalMessage(parent, "Custom Command", message,
+                JOptionPane.INFORMATION_MESSAGE, true);
+    }
+    
+    public static String formatCommandInfo(String input) {
+        return Helper.htmlspecialchars_encode(input)
+                .replace("\n", "<br />").replace(" ", "&nbsp;");
     }
     
 }

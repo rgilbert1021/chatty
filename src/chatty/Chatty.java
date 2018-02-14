@@ -51,10 +51,10 @@ public class Chatty {
     
     /**
      * Version number of this version of Chatty, consisting of numbers seperated
-     * by points. May contain a single "b" for beta versions, anything following
-     * it will be ignored for version checking.
+     * by points. May contain a single "b" for beta versions, which are counted
+     * as older (so 0.8.7b4 is older than 0.8.7).
      */
-    public static final String VERSION = "0.8.6";
+    public static final String VERSION = "0.9.1b1";
     
     /**
      * Enable Version Checker (if you compile and distribute this yourself, you
@@ -88,9 +88,10 @@ public class Chatty {
     public static final long STARTED_TIME = System.currentTimeMillis();
 
     /**
-     * If true, use the current working directory to save settings etc.
+     * Custom Settings directory, either the current working directory if the
+     * -cd parameter was used, or the directory specified with the -d parameter.
      */
-    private static boolean useCurrentDirectory = false;
+    private static String settingsDir = null;
     
     /**
      * Parse the commandline arguments and start the actual chat client.
@@ -115,7 +116,14 @@ public class Chatty {
         }
         
         if (parsedArgs.containsKey("cd")) {
-            useCurrentDirectory = true;
+            settingsDir = System.getProperty("user.dir");
+        }
+        if (parsedArgs.containsKey("d")) {
+            String dir = parsedArgs.get("d");
+            File file = new File(dir);
+            if (file.isDirectory()) {
+                settingsDir = file.toString();
+            }
         }
 
         final TwitchClient client = new TwitchClient(parsedArgs);
@@ -188,8 +196,8 @@ public class Chatty {
      * @return
      */
     public static String getUserDataDirectory() {
-        if (useCurrentDirectory) {
-            return System.getProperty("user.dir") + File.separator;
+        if (settingsDir != null) {
+            return settingsDir + File.separator;
         }
         String dir = System.getProperty("user.home")
                 + File.separator 

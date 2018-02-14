@@ -2,6 +2,7 @@
 package chatty.util.commands;
 
 import java.text.ParseException;
+import java.util.Collections;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -65,10 +66,30 @@ public class Parser {
      * @param message
      * @throws ParseException 
      */
-    private void error(String message) throws ParseException {
-        int pos = reader.pos() + 1;
-        String errorPos = input.substring(0, pos)+"<"+pos+">"+input.substring(pos, input.length());
-        throw new ParseException(message+" at pos <"+pos+"> ["+errorPos+"]", reader.pos());
+    private void error(String message, int offset) throws ParseException {
+        int pos = reader.pos() + offset;
+        
+        final int before = 30;
+        final int after = 20;
+        final String dotdot = "[..]";
+        
+        int start = pos > before+dotdot.length() ? pos - before : 0;
+        int end = input.length() > pos + after + dotdot.length() ? pos + after : input.length();
+        int displayPos = pos - start + 1; // +1 
+        String excerpt = input.substring(start, end);
+        if (start > 0) {
+            excerpt = dotdot+excerpt;
+            displayPos += dotdot.length();
+        }
+        if (end < input.length()) {
+            excerpt = excerpt+dotdot;
+        }
+        throw new ParseException(String.format("%s at pos %s\n %s\n%s^",
+                message,
+                pos+1,
+                excerpt,
+                String.join("", Collections.nCopies(displayPos, " "))
+        ), reader.pos());
     }
 
     /**
@@ -85,6 +106,10 @@ public class Parser {
             return true;
         }
         return false;
+    }
+    
+    private boolean peek(String character) {
+        return reader.hasNext() && reader.peek().equals(character);
     }
     
     private boolean acceptMatch(String regex) {
@@ -104,8 +129,36 @@ public class Parser {
      */
     private void expect(String character) throws ParseException {
         if (!reader.hasNext() || !reader.next().equals(character)) {
-            error("Expected "+character);
+            error("Expected '"+character+"'", 0);
         }
+    }
+    
+    /**
+     * Read until it encounters a character not matching the given regex. The
+     * character that caused it to stop won't be read.
+     *
+     * @param regex A regex matching a single character
+     * @return The read String, may be empty
+     */
+    private String readAll(String regex) {
+        StringBuilder b = new StringBuilder();
+        while (reader.hasNext() && reader.peek().matches(regex)) {
+            b.append(reader.next());
+        }
+        return b.toString();
+    }
+
+    /**
+     * Read a single character that matches the given regex.
+     * 
+     * @param regex A regex matching a single character
+     * @return The read String, may be empty
+     */
+    private String readOne(String regex) {
+        if (reader.hasNext() && reader.peek().matches(regex)) {
+            return reader.next();
+        }
+        return "";
     }
     
     /**
@@ -115,10 +168,7 @@ public class Parser {
      * @throws ParseException 
      */
     private Item specialThing() throws ParseException {
-        boolean isRequired = false;
-        if (accept("$")) {
-            isRequired = true;
-        }
+        boolean isRequired = accept("$");
         String type = functionName();
         if (type.isEmpty()) {
             return replacement(isRequired);
@@ -132,8 +182,11 @@ public class Parser {
         else if (type.equals("ifeq")) {
             return ifEq(isRequired);
         }
+        else if (type.equals("lower")) {
+            return lower(isRequired);
+        }
         else {
-            error("Invalid function '"+type+"'");
+            error("Invalid function '"+type+"'", 0);
             return null;
         }
     }
@@ -144,15 +197,15 @@ public class Parser {
      * @return 
      */
     private Item identifier() throws ParseException {
-        String ref = read("[a-zA-Z0-9-_]");
-        Matcher m = Pattern.compile("([0-9])+(-)?").matcher(ref);
+        String ref = readAll("[a-zA-Z0-9-_]");
+        Matcher m = Pattern.compile("([0-9]+)(-)?").matcher(ref);
         if (ref.isEmpty()) {
-            error("Expected identifier");
+            error("Expected identifier", 1);
         }
         if (m.matches()) {
             int index = Integer.parseInt(m.group(1));
             if (index == 0) {
-                error("Invalid index 0");
+                error("Invalid numeric identifier 0", 0);
             }
             boolean toEnd = m.group(2) != null;
             return new RangeIdentifier(index, toEnd);
@@ -162,13 +215,13 @@ public class Parser {
     }
     
     private Item tinyIdentifier() throws ParseException {
-        String ref = read("[0-9]");
+        String ref = readOne("[0-9]");
         if (ref.isEmpty()) {
-            error("Expected number");
+            error("Expected numeric identifier", 1);
         }
         int index = Integer.parseInt(ref);
         if (index == 0) {
-            error("Invalid index 0");
+            error("Invalid numeric identifer 0", 0);
         }
         boolean toEnd = false;
         if (accept("-")) {
@@ -179,7 +232,7 @@ public class Parser {
 
     private Item condition(boolean isRequired) throws ParseException {
         expect("(");
-        Item identifier = identifier();
+        Item identifier = peekParam();
         expect(",");
         Items output1 = param();
         Items output2 = null;
@@ -192,7 +245,7 @@ public class Parser {
     
     private Item ifEq(boolean isRequired) throws ParseException {
         expect("(");
-        Item identifier = identifier();
+        Item identifier = peekParam();
         expect(",");
         Items compare = param();
         expect(",");
@@ -207,14 +260,21 @@ public class Parser {
     
     private Item join(boolean isRequired) throws ParseException {
         expect("(");
-        Item identifier = identifier();
+        Item identifier = peekParam();
         expect(",");
         Items separator = parse("[)]");
         if (separator.isEmpty()) {
-            error("Expected separator string");
+            error("Expected separator string", 1);
         }
         expect(")");
         return new Join(identifier, separator, isRequired);
+    }
+    
+    private Item lower(boolean isRequired) throws ParseException {
+        expect("(");
+        Item identifier = peekParam();
+        expect(")");
+        return new Lower(identifier, isRequired);
     }
     
     private Replacement replacement(boolean isRequired) throws ParseException {
@@ -230,7 +290,7 @@ public class Parser {
     }
     
     private String functionName() {
-        return read("[a-zA-Z]");
+        return readAll("[a-zA-Z]");
     }
     
     private Items param() throws ParseException {
@@ -241,20 +301,10 @@ public class Parser {
         return parse("[)]");
     }
     
-    /**
-     * Read until it encounters a character matching the given regex. The
-     * character the caused it to stop won't be read.
-     * 
-     * @param regex A regex matching a single character
-     * @return The read String
-     */
-    private String read(String regex) {
-        StringBuilder b = new StringBuilder();
-        while (reader.hasNext() && reader.peek().matches(regex)) {
-            b.append(reader.next());
-        }
-        return b.toString();
+    private Item peekParam() throws ParseException {
+        return peek("$") ? param() : identifier();
     }
+    
 
     
     public static void main(String[] args) {

@@ -1,6 +1,7 @@
 
 package chatty;
 
+import chatty.gui.colors.UsercolorManager;
 import chatty.util.api.usericons.Usericon;
 import chatty.util.api.usericons.UsericonManager;
 import chatty.gui.HtmlColors;
@@ -290,8 +291,8 @@ public class User implements Comparable {
         addLine(new ModAction(System.currentTimeMillis(), commandAndParameters));
     }
     
-    public synchronized void addAutoModMessage(String line) {
-        addLine(new AutoModMessage(line));
+    public synchronized void addAutoModMessage(String line, String id) {
+        addLine(new AutoModMessage(line, id));
     }
     
     /**
@@ -513,7 +514,7 @@ public class User implements Comparable {
         if (nick.isEmpty()) {
             return;
         }
-        String name = nick.toLowerCase();
+        String name = StringUtil.toLowerCase(nick);
         int n = name.codePointAt(0) + name.codePointAt(name.length() - 1);
         color = defaultColors[n % defaultColors.length];
         hasDefaultColor = true;
@@ -933,10 +934,12 @@ public class User implements Comparable {
     public static class AutoModMessage extends Message {
         
         public final String message;
+        public final String id;
         
-        public AutoModMessage(String message) {
+        public AutoModMessage(String message, String id) {
             super(AUTO_MOD_MESSAGE, System.currentTimeMillis());
             this.message = message;
+            this.id = id;
         }
         
     }

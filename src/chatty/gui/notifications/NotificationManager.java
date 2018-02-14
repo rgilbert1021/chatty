@@ -78,7 +78,7 @@ public class NotificationManager {
     }
     
     public void streamInfoChanged(String channel, StreamInfo info) {
-        check(Type.STREAM_STATUS, "#"+info.getStream(), n -> {
+        check(Type.STREAM_STATUS, "#"+info.getStream(), null, info.getFullStatus(), n -> {
             if (info.getOnline() || !n.hasOption("noOffline")) {
                 return new NotificationData("[Status] "+channel, info.getFullStatus());
             } 
@@ -87,9 +87,13 @@ public class NotificationManager {
     }
     
     public void highlight(User user, String message, boolean noNotify,
-            boolean noSound, boolean isOwnMessage) {
+            boolean noSound, boolean isOwnMessage, boolean isWhisper,
+            boolean hasBits) {
         check(null, user.getChannel(), user, message, noNotify, noSound, n -> {
             if (isOwnMessage && !n.hasOption("own")) {
+                return null;
+            }
+            if (!hasBits && n.hasOption("bits")) {
                 return null;
             }
             if (n.type == Type.HIGHLIGHT) {
@@ -100,7 +104,7 @@ public class NotificationManager {
                 String title = String.format("[Message] %s in %s",
                         getDisplayName(user), user.getChannel());
                 return new NotificationData(title, message);
-            } else if (n.type == Type.WHISPER) {
+            } else if (n.type == Type.WHISPER && isWhisper) {
                 String title = String.format("[Whisper] %s",
                         getDisplayName(user));
                 return new NotificationData(title, message);
@@ -109,9 +113,13 @@ public class NotificationManager {
         });
     }
     
-    public void message(User user, String message, boolean isOwnMessage) {
+    public void message(User user, String message, boolean isOwnMessage,
+            boolean hasBits) {
         check(Type.MESSAGE, user.getChannel(), user, message, n -> {
             if (isOwnMessage && !n.hasOption("own")) {
+                return null;
+            }
+            if (!hasBits && n.hasOption("bits")) {
                 return null;
             }
             String title = String.format("[Message] %s in %s",
@@ -164,14 +172,16 @@ public class NotificationManager {
     }
     
     public void newSubscriber(User user, String systemMsg, String message) {
-        check(Type.SUBSCRIBER, user.getChannel(), c -> {
+        final String text;
+        if (message != null && !message.isEmpty()) {
+            text = systemMsg + " [" + message + "]";
+        } else {
+            text = systemMsg;
+        }
+        check(Type.SUBSCRIBER, user.getChannel(), user, text, c -> {
             String title = String.format("[Subscriber] %s in %s",
                     user.getDisplayNick(),
                     user.getChannel());
-            String text = systemMsg;
-            if (message != null && !message.isEmpty()) {
-                text = text+" ["+message+"]";
-            }
             return new NotificationData(title, text);
         });
     }

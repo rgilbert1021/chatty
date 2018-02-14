@@ -10,6 +10,7 @@ import chatty.gui.components.menus.ContextMenuListener;
 import chatty.gui.components.textpane.ChannelTextPane;
 import chatty.gui.components.textpane.Message;
 import chatty.util.StringUtil;
+import chatty.util.api.Emoticon;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.event.ActionEvent;
@@ -224,7 +225,7 @@ public class Channel extends JPanel {
         private final UserSorterAlphabetic userSorterAlphabetical = new UserSorterAlphabetic();
         
         private final Set<String> commands = new TreeSet<>(Arrays.asList(new String[]{
-            "subscribers", "subscribersOff", "timeout", "ban", "unban", "host", "unhost", "clear", "mods",
+            "subscribers", "subscribersOff", "timeout", "ban", "unban", "host", "unhost", "raid", "unraid", "clear", "mods",
             "part", "close", "reconnect", "slow", "slowOff", "r9k", "r9koff", "emoteonly", "emoteonlyoff",
             "connection", "uptime", "dir", "wdir", "openDir", "openWdir", "releaseInfo", "openBackupDir",
             "clearChat", "refresh", "changetoken", "testNotification", "server",
@@ -233,7 +234,7 @@ public class Channel extends JPanel {
             "customEmotes", "reloadCustomEmotes", "addStreamHighlight", "openStreamHighlights",
             "ignore", "unignore", "ignoreWhisper", "unignoreWhisper", "ignoreChat", "unignoreChat",
             "follow", "unfollow", "ffzws", "followers", "followersoff",
-            "setcolor", "untimeout"
+            "setcolor", "untimeout", "userinfo", "joinhosted", "favorite", "unfavorite"
         }));
         
         private final Set<String> prefixesPreferUsernames = new HashSet<>(Arrays.asList(new String[]{
@@ -252,7 +253,7 @@ public class Channel extends JPanel {
         @Override
         public CompletionItems getCompletionItems(String type, String prefix, String search) {
             updateSettings();
-            search = search.toLowerCase(Locale.ENGLISH);
+            search = StringUtil.toLowerCase(search);
             if (type == null) {
                 return getRegularCompletionItems(prefix, search);
             } else if (type.equals("special")) {
@@ -261,6 +262,13 @@ public class Channel extends JPanel {
             return new CompletionItems();
         }
         
+        /**
+         * TAB
+         * 
+         * @param prefix
+         * @param search
+         * @return 
+         */
         private CompletionItems getRegularCompletionItems(String prefix, String search) {
             List<String> items;
             if (prefix.startsWith("/")
@@ -268,26 +276,92 @@ public class Channel extends JPanel {
                     || prefix.equals("/add ") || prefix.equals("/remove ")
                     || prefix.equals("/clearSetting ")
                     || prefix.equals("/reset "))) {
+                //--------------
+                // Setting Names
+                //--------------
                 items = filterCompletionItems(main.getSettingNames(), search);
                 input.setCompleteToCommonPrefix(true);
             } else if (prefix.equals("/")) {
+                //--------------
+                // Command Names
+                //--------------
                 items = filterCompletionItems(commands, search);
+                items.addAll(filterCompletionItems(main.getCustomCommandNames(), search));
             } else {
-                boolean preferUsernames = prefixesPreferUsernames.contains(prefix)
-                        && main.getSettings().getBoolean("completionPreferUsernames");
-                return getCompletionItemsNames(search, preferUsernames);
+                //--------------------
+                // Depending on Config
+                //--------------------
+                return getMainItems(main.getSettings().getString("completionTab"), prefix, search);
             }
             return new CompletionItems(items, "");
         }
         
+        /**
+         * Shift-TAB
+         * 
+         * @param prefix
+         * @param search
+         * @return 
+         */
         private CompletionItems getSpecialItems(String prefix, String search) {
+            return getMainItems(main.getSettings().getString("completionTab2"), prefix, search);
+        }
+        
+        /**
+         * Returns items that depend on current settings, but also some
+         * prefixes.
+         *
+         * @param setting
+         * @param prefix
+         * @param search
+         * @return 
+         */
+        private CompletionItems getMainItems(String setting, String prefix, String search) {
+            boolean preferUsernames = prefixesPreferUsernames.contains(prefix)
+                        && main.getSettings().getBoolean("completionPreferUsernames");
+            
+            // Check prefixes and other non-setting dependant stuff first
+            if (prefix.endsWith("@") || prefixesPreferUsernames.contains(prefix)) {
+                return getCompletionItemsNames(search, preferUsernames);
+            }
             if (prefix.endsWith(".")) {
                 return new CompletionItems(getCustomCompletionItems(search), ".");
-            } else {
-                Collection<String> emotes = new LinkedList<>(main.getEmoteNames());
-                emotes.addAll(main.getEmoteNamesPerStream(getStreamName()));
-                return new CompletionItems(filterCompletionItems(emotes, search), "");
             }
+            if (prefix.endsWith(":")) {
+                return getCompletionItemsEmoji(search);
+            }
+            
+            // Then check settings
+            if (setting.equals("names")) {
+                return getCompletionItemsNames(search, preferUsernames);
+            }
+            if (setting.equals("emotes")) {
+                return getCompletionItemsEmotes(search, false);
+            }
+            if (setting.equals("custom")) {
+                return new CompletionItems(getCustomCompletionItems(search), "");
+            }
+            CompletionItems names = getCompletionItemsNames(search, preferUsernames);
+            CompletionItems emotes = getCompletionItemsEmotes(search, true);
+            if (setting.equals("both")) {
+                names.append(emotes);
+                return names;
+            } else { // both2
+                emotes.append(names);
+                return emotes;
+            }
+        }
+
+        private CompletionItems getCompletionItemsEmotes(String search, boolean includeInfo) {
+            Collection<String> allEmotes = new LinkedList<>(main.getEmoteNames());
+            allEmotes.addAll(main.getEmoteNamesPerStream(getStreamName()));
+            List<String> result = filterCompletionItems(allEmotes, search);
+            if (includeInfo) {
+                Map<String, String> info = new HashMap<>();
+                result.forEach(n -> info.put(n, "<small>Emote</small>"));
+                return new CompletionItems(result, info, "");
+            }
+            return new CompletionItems(result, "");
         }
         
         private List<String> getCustomCompletionItems(String search) {
@@ -299,11 +373,32 @@ public class Channel extends JPanel {
             return list;
         }
         
+        private CompletionItems getCompletionItemsEmoji(String search) {
+            List<String> result = new LinkedList<>();
+            Map<String, String> info = new HashMap<>();
+            // Get font height for correct display size of Emoji
+            int height = input.getFontMetrics(input.getFont()).getHeight();
+            for (Emoticon emote : main.emoticons.getEmoji()) {
+                if (emote.stringId != null
+                        && (emote.stringId.startsWith(":"+search)
+                            || (search.length() > 3 && emote.stringId.contains(search)))) {
+                    if (main.getSettings().getBoolean("emojiReplace")) {
+                        result.add(emote.stringId);
+                        info.put(emote.stringId, "<img width='"+height+"' height='"+height+"' src='"+emote.url+"'/>");
+                    } else {
+                        result.add(emote.code);
+                        info.put(emote.code, emote.stringId+" <img width='"+height+"' height='"+height+"' src='"+emote.url+"'/>");
+                    }
+                }
+            }
+            return new CompletionItems(result, info, ":");
+        }
+        
         private List<String> filterCompletionItems(Collection<String> data,
                 String search) {
             List<String> matched = new ArrayList<>();
             for (String name : data) {
-                if (name.toLowerCase().startsWith(search)) {
+                if (StringUtil.toLowerCase(name).startsWith(search)) {
                     matched.add(name);
                 }
             }
@@ -322,11 +417,11 @@ public class Channel extends JPanel {
                     matched = true;
                     regularMatched.add(user);
                 }
-                if (!user.hasRegularDisplayNick() && user.getDisplayNick().toLowerCase(Locale.ROOT).startsWith(search)) {
+                if (!user.hasRegularDisplayNick() && StringUtil.toLowerCase(user.getDisplayNick()).startsWith(search)) {
                     matched = true;
                     localizedMatched.add(user);
                 }
-                if (user.hasCustomNickSet() && user.getCustomNick().toLowerCase(Locale.ROOT).startsWith(search)) {
+                if (user.hasCustomNickSet() && StringUtil.toLowerCase(user.getCustomNick()).startsWith(search)) {
                     matched = true;
                     customMatched.add(user);
                 }
@@ -398,28 +493,6 @@ public class Channel extends JPanel {
                     info.put(user.getCustomNick(), user.getRegularDisplayNick());
                     info.put(user.getRegularDisplayNick(), user.getCustomNick());
                 }
-                
-                
-//                if (!user.hasRegularDisplayNick()) {
-//                    if (localizedMatched.contains(user) && !preferUsernames) {
-//                        nicks.add(user.getDisplayNick());
-//                        if (localizedBoth) {
-//                            nicks.add(user.getRegularDisplayNick());
-//                        }
-//                    } else {
-//                        nicks.add(user.getRegularDisplayNick());
-//                        if (localizedBoth) {
-//                            nicks.add(user.getDisplayNick());
-//                        }
-//                    }
-//                    info.put(user.getDisplayNick(), user.getRegularDisplayNick());
-//                    info.put(user.getRegularDisplayNick(), user.getDisplayNick());
-//                } else {
-//                    nicks.add(user.getRegularDisplayNick());
-//                    if (!user.hasRegularDisplayNick()) {
-//                        info.put(user.getRegularDisplayNick(), user.getDisplayNick());
-//                    }
-//                }
             }
             return new CompletionItems(nicks, info, "");
         }
@@ -512,10 +585,12 @@ public class Channel extends JPanel {
     }
     
     private void setStyles() {
-        input.setFont(styleManager.getFont());
+        input.setFont(styleManager.getFont("input"));
         input.setBackground(styleManager.getColor("inputBackground"));
         input.setCaretColor(styleManager.getColor("inputForeground"));
         input.setForeground(styleManager.getColor("inputForeground"));
+        input.setHistoryRequireCtrlMultirow(main.getSettings().getBoolean("inputHistoryMultirowRequireCtrl"));
+        users.setFont(styleManager.getFont("userlist"));
         users.setBackground(styleManager.getColor("background"));
         users.setForeground(styleManager.getColor("foreground"));
         refreshBufferSize();

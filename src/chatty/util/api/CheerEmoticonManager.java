@@ -31,7 +31,7 @@ public class CheerEmoticonManager extends CachedManager {
     }
     
     @Override
-    protected boolean handleData(String data) {
+    public boolean handleData(String data) {
         Set<CheerEmoticon> result = parse(data, null);
         if (result == null || result.isEmpty()) {
             return false;
@@ -73,7 +73,6 @@ public class CheerEmoticonManager extends CachedManager {
             if (type == null || !type.equals("channel_custom")) {
                 stream = null;
             }
-            System.out.println(prefix+" "+stream);
             JSONArray tiers = (JSONArray)entry.get("tiers");
             for (Object o : tiers) {
                 CheerEmoticon tierResult = getTier(prefix, (JSONObject)o, stream);

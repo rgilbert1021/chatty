@@ -2,6 +2,8 @@
 package chatty.util.api;
 
 import chatty.Helper;
+import chatty.util.TwitchEmotes.EmotesetInfo;
+import chatty.util.api.CommunitiesManager.CommunitiesListener;
 import chatty.util.api.CommunitiesManager.Community;
 import chatty.util.api.CommunitiesManager.CommunityListener;
 import chatty.util.api.CommunitiesManager.CommunityPutListener;
@@ -37,6 +39,7 @@ public class TwitchApi {
     
     protected final StreamInfoManager streamInfoManager;
     protected final EmoticonManager emoticonManager;
+    protected final EmoticonManager2 emoticonManager2;
     protected final CheerEmoticonManager cheersManager;
     protected final CheerEmoticonManager2 cheersManager2;
     protected final FollowerManager followerManager;
@@ -66,7 +69,7 @@ public class TwitchApi {
         channelInfoManager = new ChannelInfoManager(this, resultListener);
         userIDs = new UserIDs(this);
         communitiesManager = new CommunitiesManager(this);
-        
+        emoticonManager2 = new EmoticonManager2(resultListener, requests);
         getCommunityTop(r -> {});
     }
     
@@ -81,10 +84,32 @@ public class TwitchApi {
         }
     }
     
-    public void requestEmoticons(boolean forcedUpdate) {
-        if (forcedUpdate || !emoticonManager.load(false)) {
-            requests.requestEmoticons(forcedUpdate);
-        }
+    public void getEmotesBySets(Integer... emotesets) {
+        getEmotesBySets(new HashSet<>(Arrays.asList(emotesets)));
+    }
+    
+    public void getEmotesBySets(Set<Integer> emotesets) {
+        emoticonManager2.addEmotesets(emotesets);
+    }
+    
+    public void getEmotesByStreams(String... streams) {
+        emoticonManager2.addStreams(new HashSet<>(Arrays.asList(streams)));
+    }
+    
+    public void refreshEmotes() {
+        emoticonManager2.refresh();
+    }
+    
+    public void refreshEmotesOld() {
+        requests.requestEmoticons(true);
+    }
+    
+    public void requestEmotesNow() {
+        emoticonManager2.requestNow();
+    }
+    
+    public void setEmotesetInfo(EmotesetInfo info) {
+        emoticonManager2.setEmotesetInfo(info);
     }
     
     public void getGlobalBadges(boolean forceRefresh) {
@@ -345,6 +370,65 @@ public class TwitchApi {
     }
     
     /**
+     * Gets the communities for the given ids, in the same order, however only
+     * returns communities that could be retrieved without error.
+     * 
+     * If the communities were all cached the listener is notified immediately,
+     * in the same thread, otherwise it will request asynchronously.
+     * 
+     * Duplicate ids will be reduced to one entry in the result.
+     * 
+     * @param ids
+     * @param listener 
+     */
+    public void getCommunities(List<String> ids, CommunitiesListener listener) {
+        if (ids == null || ids.isEmpty()) {
+            listener.received(null, "No community ids.");
+        } else {
+            CommunityListener clistener = new CommunityListener() {
+                
+                private final Community[] data = new Community[ids.size()];
+                private int counter = ids.size();
+
+                @Override
+                public void received(Community community, String error) {
+                    List<Community> result = null;
+                    synchronized(data) {
+                        counter--;
+                        if (community != null) {
+                            //System.out.println("received (" + counter + "/" + ids.size() + "): " + community + " " + community.getId());
+                            // Find occurence of id in request, to retain order
+                            // (this implicitly also removes duplicates, since it
+                            // only finds the first occurence)
+                            data[ids.indexOf(community.getId())] = community;
+                        } else {
+                            //System.out.println("error (" + counter + "/" + ids.size() + "): "+error);
+                        }
+                        if (counter == 0) {
+                            // All received, make and send result
+                            result = new ArrayList<>();
+                            for (Community c : data) {
+                                if (c != null) {
+                                    result.add(c);
+                                }
+                            }
+                            //System.out.println("result: " + result);
+                        }
+                    }
+                    if (result != null) {
+                        listener.received(result, null);
+                    }
+                }
+            };
+            
+            // Request using the created listener
+            for (String id : ids) {
+                communitiesManager.getById(id, clistener);
+            }
+        }
+    }
+    
+    /**
      * Requests the current top 100 communities.
      * 
      * @param listener 
@@ -354,7 +438,7 @@ public class TwitchApi {
     }
     
     /**
-     * Requests the community by name.
+     * Requests the community by name (no caching).
      * 
      * @param name The name of the community
      * @param listener 
@@ -367,31 +451,37 @@ public class TwitchApi {
         }
     }
     
+    /**
+     * Immediately requests the Community for the given id (no caching).
+     * 
+     * @param id
+     * @param listener 
+     */
     public void getCommunityById(String id, CommunityListener listener) {
         requests.getCommunityById(id, listener);
     }
     
-    public void setCommunity(String channelName, String communityId, CommunityPutListener listener) {
+    public void setCommunities(String channelName, List<Community> communities,
+            CommunityPutListener listener) {
         userIDs.getUserIDsAsap(r -> {
             if (r.hasError()) {
                 listener.result("Failed getting user id");
             } else {
-                String channelId = r.getId(channelName);
-                if (communityId != null) {
-                    requests.setCommunity(channelId, communityId, defaultToken, listener);
-                } else {
-                    requests.removeCommunity(channelId, defaultToken, listener);
+                List<String> communityIds = new ArrayList<>();
+                for (Community c : communities) {
+                    communityIds.add(c.getId());
                 }
+                requests.setCommunities(r.getId(channelName), communityIds, defaultToken, listener);
             }
         }, channelName);
     }
     
-    public void getCommunityForChannel(String channelName, CommunityListener listener) {
+    public void getCommunitiesForChannel(String channelName, CommunitiesListener listener) {
         userIDs.getUserIDsAsap(r -> {
             if (r.hasError()) {
                 listener.received(null, "Error resolving id.");
             } else {
-                requests.getCommunity(r.getId(channelName), listener);
+                requests.getCommunities(r.getId(channelName), listener);
             }
         }, channelName);
     }
@@ -406,8 +496,12 @@ public class TwitchApi {
         }, stream);
     }
     
-    public void autoMod(String action, String msgId) {
-        requests.autoMod(action, msgId, defaultToken);
+    public void autoModApprove(String msgId) {
+        requests.autoMod("approve", msgId, defaultToken);
+    }
+    
+    public void autoModDeny(String msgId) {
+        requests.autoMod("deny", msgId, defaultToken);
     }
 
 }

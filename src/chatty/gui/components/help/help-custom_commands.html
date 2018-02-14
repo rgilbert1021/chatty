@@ -26,8 +26,10 @@
                 <li><a href="#commands-list">Format 1: List Custom Command Names</a></li>
                 <li><a href="#inline-commands">Format 2: Inline-Commands</a></li>
                 <li><a href="#submenus">Format 3: Submenus</a></li>
+                <li><a href="#separators">Separators</a></li>
                 <li><a href="#shortcuts">Shortcuts</a></li>
                 <li><a href="#positioning">Positioning</a></li>
+                <li><a href="#special-commands">Special Commands</a></li>
             </ul>
         </li>
     </ul>
@@ -65,6 +67,13 @@
         way to can add variations of commands for specific channels.</p>
     
     <h2><a name="replacements">Replacements</a></h2>
+    <ul>
+        <li><a href="#simple-replacements">Simple Replacements</a></li>
+        <li><a href="#parameters-context">Pre-defined Parameters</a></li>
+        <li><a href="#functions">Functions</a></li>
+        <li><a href="#custom-replacements">Custom Replacements</a></li>
+    </ul>
+    
     <p>Anything starting with <code>$</code> in the <code>&lt;what the command
         should do&gt;</code> section is treated as some sort of replacement.
         Each replacement must contain an <strong>identifier</strong>
@@ -72,8 +81,8 @@
     
     <p>For the <strong>short notation</strong> the identifier is written
         directly after the dollar sign: <code>$&lt;identifier&gt;</code> .
-        In thise case it may only consist of a number and a dash:
-        <code>$&lt;1-9-&gt;</code> . Numeric identifiers refer to the parameters
+        In thise case it may only consist of a number and an optional dash:
+        <code>$&lt;1-9&gt;[-]</code> . Numeric identifiers refer to the parameters
         supplied to the command.</p>
     
     <p>For the <strong>regular notation</strong> the identifier is written after
@@ -133,7 +142,7 @@
     <h3><a name="parameters-context">Pre-defined Parameters</a></h3>
     <p>Custom Commands can be used in a number of different places. Depending on
         the context there are different pre-defined parameters available. The
-        following table shows which identifiers that can be used in which
+        following table shows which identifiers can be used in which
         context. To use an identifier put it in a replacement, for example
         <code>$(chan)</code> or <code>$$join(1-,/)</code>.</p>
     
@@ -242,6 +251,11 @@
         <dd><em>Example:</em> <code>$join(1-,/)</code> with <code>1-</code> referring to
             <code>flour sugar eggs</code> turns into <code>flour/sugar/eggs</code></dd>
         <dd>This effectively replaces spaces in the parameters with the separator.</dd>
+        
+        <dt><code>$lower(&lt;identifier&gt;)</code></dt>
+        <dd>Makes the given input lowercase.</dd>
+        <dd><em>Example:</em> <code>$lower(1)</code> with <code>1</code>
+            referring to <code>Fremily</code> turns into <code>fremily</code>.</dd>
     </dl>
     
     <p class="note"><em>Note:</em> The <code>&lt;identifier&gt;</code> parameter means <em>only</em>
@@ -249,6 +263,10 @@
         may contain replacements (including functions). You can think of this
         function syntax as an extension to the regular replacement:
         <code>$(1-) -> $<u>join</u>(1-<u>,/</u>)</code></p>
+    
+    <p class="note"><em>Addendum:</em> As of v0.8.7 the <code>&lt;identifier&gt;</code>
+        parameter will also accept replacements as input (anything starting with
+        <code>$</code>).</p>
     
     <p>Examples of Custom Commands with these functions:</p>
     <dl class="defList">
@@ -293,6 +311,16 @@
     
     
     <h2><a name="menus">Custom Context Menus / User Dialog Buttons</a></h2>
+    <ul>
+        <li><a href="#commands-list">Format 1: List Custom Command Names</a></li>
+        <li><a href="#inline-commands">Format 2: Inline-Commands</a></li>
+        <li><a href="#submenus">Format 3: Submenus</a></li>
+        <li><a href="#separators">Separators</a></li>
+        <li><a href="#shortcuts">Shortcuts</a></li>
+        <li><a href="#positioning">Positioning</a></li>
+        <li><a href="#special-commands">Special Commands</a></li>
+    </ul>
+    
     <p>Under <code>Settings - Commands</code> there are several settings that
         allow you to add additional entries/buttons in a few different places:</p>
     
@@ -312,7 +340,9 @@
         
         <dt>User Dialog Buttons</dt>
         <dd>Defines which buttons are visible in the dialog that opens when you
-            click on a user in chat (or double-click in the userlist).</dd>
+            click on a user in chat (or double-click in the userlist). Note
+            the <a href="#special-commands">Special Commands</a> you can use for
+            this setting.</dd>
     </dl>
     
     <p>All those settings share the same format (with some slight differences
@@ -378,14 +408,6 @@ Spoiler[S]=/timeout $$1 600 No spoilers
             time.</dd>
     </dl>
     
-    <p>The command <code>/modunmod</code> has a special meaning in the
-        <strong>User Dialog</strong> and is used to add a
-        <strong>Mod/Unmod-Button</strong> which automatically changes depending
-        on the selected user and whether you are the broadcaster on the channel
-        (so the button doesn't always show). Reposition this command to change
-        where the Mod/Unmod-Button appears, or remove it altogether if you don't
-        want it.</p>
-    
     <h3><a name="inline-commands">Format 2: Inline-Commands</a></h3>
     <p>You can define commands directly in the setting, without having to add
         them as a named Custom Command first. The syntax for this is:</p>
@@ -442,17 +464,41 @@ Spoiler[S]=/timeout $$1 600 No spoilers
         command.</p>
     
     
+    <h3><a name="separators">Separators</a></h3>
+    <p>In <strong>Context menus</strong> you can add separators between entries.
+        When you use a <a href="#commands-list">commands list</a>, you can add
+        a vertical bar (<code>|</code>) between entries.</p>
+    
+    <p>You can also add a separator by adding a single dash (<code>-</code>) on
+        it's own line.</p>
+    
+    <p>Example (separator before <code>Timeout</code> menu, before <code>Message</code>
+        and before <code>Vods</code>):</p>
+    <div class="codeblock"><pre>
+/Ban /Purge
+-
+@Timeout
+.5s 10m
+-
+/Message /Report | /Vods
+</pre></div>
+    
     <h3><a name="shortcuts">Shortcuts</a></h3>
     <p>You can add a shortcut to the end of a label or command name by enclosing
         it with <code>[ ]</code> (square brackets):</p>
     
-    <p><code>/Ban[B]</code> or <code>Spoiler[S]=/timeout $$1 ..</code></p>
+    <p><code>/Ban[B]</code> or <code>Spoiler[S]=/timeout $$1 ..</code>
+        (depending on the line format)</p>
     
     <p>For <strong>User Dialog Buttons</strong> those can be used while the
         dialog is open and focused. They are interpreted by
         <a href="https://docs.oracle.com/javase/7/docs/api/javax/swing/KeyStroke.html#getKeyStroke%28java.lang.String%29">getKeyStroke()</a>
         which means anything that function understands can be used. However
-        spaces are not allowed, so a plus sign <code>+</code> can be used instead.</p>
+        spaces are not allowed, so a plus sign <code>+</code> can be used instead.
+        Examples: <code>alt+Q</code>, <code>shift+1</code>, <code>INSERT</code></p>
+    
+    <p><em>Note:</em> The lowercase/uppercase matters for it to be parsed
+        correctly.</p>
     
     <p>Adding a vertical bar <code>|</code> after the shortcut will use the text
         after it as label for the shortcut on the button (no spaces allowed). If
@@ -505,6 +551,25 @@ Spoiler[S]=/timeout $$1 600 No spoilers
         positioning is based on the current state of the menu, so it can matter
         <em>when</em> you add entries with absolute positioning.</p>
     
+    <h3><a name="special-commands">Special Commands</a></h3>
+    
+    <p>In the User Dialog Buttons setting you can use some special commands:</p>
+    <ul>
+        <li>Add the command <code>/modunmod</code> to ada a <strong>Mod/Unmod-Button</strong>
+            which automatically changes depending on the selected user and
+            whether you are the broadcaster on the channel (so the button
+            doesn't always show up).</li>
+        <li>The commands <code>/Automod_approve</code> and <code>/Automod_deny</code>
+            only appear as buttons when you opened the User Dialog by clicking
+            on the username of a message rejected by AutoMod.</li>
+    </ul>
+    
+    <p>To make use of these you only need to enter the command, you don't need
+        any parameters (Chatty will take care of that). For example simply add
+        <code>/Modunmod</code> or <code>Approve=/Automod_approve</code> to add
+        it to the layout (using the syntax shown on this help page). Chatty will
+        then recognize the command names and the buttons will only show up when
+        they are needed.</p>
 </body>
 </html>
 

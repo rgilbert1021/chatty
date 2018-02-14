@@ -2,18 +2,18 @@
 package chatty.gui.components;
 
 import chatty.Chatty;
+import chatty.gui.GuiUtil;
 import chatty.gui.components.LiveStreamsList.ListDataChangedListener;
 import chatty.gui.components.menus.ContextMenuAdapter;
 import chatty.gui.components.menus.ContextMenuListener;
+import chatty.lang.Language;
 import chatty.util.api.StreamInfo;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.List;
 import javax.swing.JFrame;
 import javax.swing.JScrollPane;
 
@@ -95,35 +95,36 @@ public class LiveStreamsDialog extends JFrame {
         
         // Test data
         if (Chatty.DEBUG) {
-            List<StreamInfo> testData = new ArrayList<>();
-            StreamInfo testEntry1 = new StreamInfo("joshimuz", null);
-            testEntry1.set("Crash Nitro Kart WR Attempts - GTA:SA in December hopefully possibly maybe", "Crash Nitro Kart", 140, -1);
-            testEntry1.setDisplayName("Joshimoose");
-            testData.add(testEntry1);
-            StreamInfo testEntry2 = new StreamInfo("mrnojojojo", null);
-            testEntry2.set("GTA3 Wintermod Race", "Grand Theft Auto III", 123, -1);
-            testData.add(testEntry2);
-            StreamInfo testEntry3 = new StreamInfo("ismokybacon", null);
-            testEntry3.set("GTA:SA Badlands any% Race", "Grand Theft Auto: San Andreas", 14, -1);
-            testData.add(testEntry3);
-            StreamInfo testEntry4 = new StreamInfo("abc", null);
-            testEntry4.set("GTA:SA Badlands any% Race", null, 14, -1);
-            testData.add(testEntry4);
-            for (int i=0;i<0;i++) {
-                StreamInfo newEntry = new StreamInfo("test"+i, null);
-                newEntry.set("Random Title", "Some Game", i, -1);
-                testData.add(newEntry);
-            }
-            list.addStreams(testData);
-            removedList.addStreamInfo(testEntry1);
-            removedList.addStreamInfo(testEntry2);
-            removedList.addStreamInfo(testEntry3);
-            removedList.addStreamInfo(testEntry4);
+//            List<StreamInfo> testData = new ArrayList<>();
+//            StreamInfo testEntry1 = new StreamInfo("joshimuz", null);
+//            testEntry1.set("Crash Nitro Kart WR Attempts - GTA:SA in December hopefully possibly maybe", "Crash Nitro Kart", 140, -1);
+//            testEntry1.setDisplayName("Joshimoose");
+//            testData.add(testEntry1);
+//            StreamInfo testEntry2 = new StreamInfo("mrnojojojo", null);
+//            testEntry2.set("GTA3 Wintermod Race", "Grand Theft Auto III", 123, -1);
+//            testData.add(testEntry2);
+//            StreamInfo testEntry3 = new StreamInfo("ismokybacon", null);
+//            testEntry3.set("GTA:SA Badlands any% Race", "Grand Theft Auto: San Andreas", 14, -1);
+//            testData.add(testEntry3);
+//            StreamInfo testEntry4 = new StreamInfo("abc", null);
+//            testEntry4.set("GTA:SA Badlands any% Race", null, 14, -1);
+//            testData.add(testEntry4);
+//            for (int i=0;i<0;i++) {
+//                StreamInfo newEntry = new StreamInfo("test"+i, null);
+//                newEntry.set("Random Title", "Some Game", i, -1);
+//                testData.add(newEntry);
+//            }
+//            list.addStreams(testData);
+//            removedList.addStreamInfo(testEntry1);
+//            removedList.addStreamInfo(testEntry2);
+//            removedList.addStreamInfo(testEntry3);
+//            removedList.addStreamInfo(testEntry4);
         }
         
         
         
         channelInfo = new ChannelInfoDialog(this);
+        GuiUtil.installEscapeCloseOperation(channelInfo);
         channelInfo.addContextMenuListener(listener);
         
         // Add to dialog
@@ -168,6 +169,10 @@ public class LiveStreamsDialog extends JFrame {
         channelInfo.setHistoryRange(range);
     }
     
+    public void setHistoryVerticalZoom(boolean zoom) {
+        channelInfo.setHistoryVerticalZoom(zoom);
+    }
+    
     /**
      * Sets the sorting of the list to the given comparator and changes the
      * title accordingly.
@@ -175,26 +180,26 @@ public class LiveStreamsDialog extends JFrame {
      * @param mode 
      */
     private void setSorting(Comparator<StreamInfo> mode) {
-        String text = "Sorting: ";
         if (mode == NAME_COMPARATOR) {
-            text += "Name";
+            titleSorting = Language.getString("streams.sorting.name");
         } else if (mode == CHANGED_COMPARATOR) {
-            text += "Recent";
+            titleSorting = Language.getString("streams.sorting.recent");
         } else if (mode == GAME_COMPARATOR) {
-            text += "Game";
+            titleSorting = Language.getString("streams.sorting.game");
         } else if (mode == VIEWERS_COMPARATOR) {
-            text += "Viewers";
+            titleSorting = Language.getString("streams.sorting.viewers");
         }
-        titleSorting = text;
         updateTitle();
         list.setComparator(mode);
     }
     
     private void updateTitle() {
         if (liveStreamListSelected) {
-            setTitle(BASE_TITLE+" ("+titleCounts+") ["+titleSorting+"]");
+            setTitle(Language.getString("streams.title",
+                    list.getModel().getSize(),
+                    titleSorting));
         } else {
-            setTitle("Offline/Left Streams");
+            setTitle(Language.getString("streams.removed.title"));
         }
     }
     

@@ -2,10 +2,14 @@
 package chatty.gui.components.settings;
 
 import chatty.gui.GuiUtil;
+import chatty.gui.Highlighter;
 import chatty.gui.components.LinkLabel;
+import chatty.util.StringUtil;
+import java.awt.Component;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import javax.swing.JButton;
@@ -25,7 +29,8 @@ public class HighlightSettings extends SettingsPanel {
             + "<ul style='margin-left:30px'>"
             + "<li><code>cs:</code> - match case sensitive</li>"
             + "<li><code>w:/wcs:</code> - match as whole word / case-sensitive</li>"
-            + "<li><code>re:</code> - use regular expression</li>"
+            + "<li><code>re:</code> - regular expression</li>"
+            + "<li><code>re*:</code> - regular expression, partial match enough</li>"
             + "<li><code>chan:chan1,chan2/!chan:</code> - restrict to channel(s) / inverted</li>"
             + "<li><code>user:name</code> - restrict to user with that name</li>"
             + "<li><code>cat:category</code> - restrict to users in that category</li>"
@@ -94,6 +99,14 @@ public class HighlightSettings extends SettingsPanel {
                 return input.trim();
             }
         });
+        items.setTester(new Editor.Tester() {
+
+            @Override
+            public String test(Window parent, Component component, int x, int y, String value) {
+                HighlighterTester tester = new HighlighterTester(parent, value);
+                return tester.test();
+            }
+        });
         gbc.fill = GridBagConstraints.BOTH;
         gbc.weightx = 1;
         gbc.weighty = 1;
@@ -121,7 +134,7 @@ public class HighlightSettings extends SettingsPanel {
 
             @Override
             public String format(String input) {
-                return input.replaceAll("\\s", "").toLowerCase();
+                return StringUtil.toLowerCase(input.replaceAll("\\s", ""));
             }
         };
         

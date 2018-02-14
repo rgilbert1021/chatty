@@ -46,6 +46,7 @@ public class UserList extends JList<User> {
                     setToolTipText("error");
                     return this;
                 }
+                // Configure some default stuff like colors
                 super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
                 
                 User user = (User)value;
@@ -130,7 +131,7 @@ public class UserList extends JList<User> {
         if (e.isPopupTrigger()) {
             User user = getUser(e);
             if (user != null) {
-                UserContextMenu m = new UserContextMenu(user, contextMenuListener);
+                UserContextMenu m = new UserContextMenu(user, null, contextMenuListener);
                 m.show(this, e.getX(), e.getY());
             }
         }
@@ -161,7 +162,7 @@ public class UserList extends JList<User> {
     private void userSelected(MouseEvent e) {
         User user = getUser(e);
         if (user != null) {
-            userListener.userClicked(user, null, e);
+            userListener.userClicked(user, null, null, e);
         }
     }
     

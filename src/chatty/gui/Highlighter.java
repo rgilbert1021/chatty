@@ -3,6 +3,7 @@ package chatty.gui;
 
 import chatty.Helper;
 import chatty.User;
+import chatty.util.StringUtil;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -132,7 +133,11 @@ public class Highlighter {
         lastMatchNoNotification = false;
         lastMatchNoSound = false;
         
-        String lowercaseText = text.toLowerCase();
+        // Not sure if default locale or not is better here, but it should at
+        // least be the same between input text and match strings.
+        //
+        // Always using english locale may be more consistent though.
+        String lowercaseText = text.toLowerCase(Locale.ENGLISH);
         
         // Try to match own name first (if enabled)
         if (highlightUsername && usernamePattern != null &&
@@ -200,6 +205,7 @@ public class Highlighter {
         private String username;
         private Pattern usernamePattern;
         private Pattern pattern;
+        private Pattern pattern2;
         private String caseSensitive;
         private String caseInsensitive;
         private String startsWith;
@@ -215,6 +221,8 @@ public class Highlighter {
         private boolean noSound;
         private boolean appliesToInfo;
         
+        private boolean error;
+
         private final Set<Status> statusReq = new HashSet<>();
         private final Set<Status> statusReqNot = new HashSet<>();
         
@@ -250,14 +258,16 @@ public class Highlighter {
             item = item.trim();
             if (item.startsWith("re:") && item.length() > 3) {
                 compilePattern(item.substring(3));
+            } else if (item.startsWith("re*:") && item.length() > 4) {
+                compilePattern2(item.substring(4));
             } else if (item.startsWith("w:") && item.length() > 2) {
-                compilePattern("(?i).*\\b"+item.substring(2)+"\\b.*");
+                compilePattern("(?iu).*\\b"+item.substring(2)+"\\b.*");
             } else if (item.startsWith("wcs:") && item.length() > 4) {
                 compilePattern(".*\\b"+item.substring(4)+"\\b.*");
             } else if (item.startsWith("cs:") && item.length() > 3) {
                 caseSensitive = item.substring(3);
             } else if (item.startsWith("start:") && item.length() > 6) {
-                startsWith = item.substring(6).toLowerCase();
+                startsWith = item.substring(6).toLowerCase(Locale.ENGLISH);
             } else if (item.startsWith("reply:") && item.length() > 6) {
                 response = item.substring(6);
             } else if (item.startsWith("cat:")) {
@@ -288,7 +298,7 @@ public class Highlighter {
             } else if (item.startsWith("config:")) {
                 parseListPrefix(item, "config:");
             } else {
-                caseInsensitive = item.toLowerCase();
+                caseInsensitive = item.toLowerCase(Locale.ENGLISH);
             }
         }
         
@@ -373,30 +383,59 @@ public class Highlighter {
             try {
                 pattern = Pattern.compile(patternString);
             } catch (PatternSyntaxException ex) {
+                error = true;
                 LOGGER.warning("Invalid regex: " + ex);
             }
         }
         
+        private void compilePattern2(String patternString) {
+            try {
+                pattern2 = Pattern.compile(patternString);
+            } catch (PatternSyntaxException ex) {
+                error = true;
+                LOGGER.warning("Invalid regex2: " + ex);
+            }
+        }
+
         private void compileUsernamePattern(String patternString) {
             try {
                 usernamePattern = Pattern.compile(patternString);
             } catch (PatternSyntaxException ex) {
+                error = true;
                 LOGGER.warning("Invalid username regex: " + ex);
             }
         }
         
+        public boolean matches(String text) {
+            return matches(null, text, StringUtil.toLowerCase(text), true);
+        }
+
+        public boolean matches(String text, String lowercaseText) {
+            return matches(null, text, lowercaseText, true);
+        }
+
+        public boolean matches(User user, String text, String lowercaseText) {
+            return matches(user, text, lowercaseText, false);
+        }
+
         /**
          * Check whether a message matches this item.
          * 
-         * @param lowercaseUsername The username in lowercase
+         * @param user The User object, or null if this message has none
          * @param text The text as received
          * @param lowercaseText The text in lowercase (minor optimization, so
          *  it doesn't have to be made lowercase for every item)
+         * @param noUserRequired Will continue matching when no User object is
+         * given, even without config:info
          * @return true if it matches, false otherwise
          */
-        public boolean matches(User user, String text, String lowercaseText) {
+        public boolean matches(User user, String text, String lowercaseText,
+                boolean noUserRequired) {
             
             if (pattern != null && !pattern.matcher(text).matches()) {
+                return false;
+            }
+            if (pattern2 != null && !pattern2.matcher(text).find()) {
                 return false;
             }
             if (caseSensitive != null && !text.contains(caseSensitive)) {
@@ -408,10 +447,22 @@ public class Highlighter {
             if (startsWith != null && !lowercaseText.startsWith(startsWith)) {
                 return false;
             }
+            /**
+             * This was called without User object, so only match if either
+             * "config:info" was present or wanted by the caller (e.g. if only
+             * applied to one message type).
+             */
             if (user == null) {
-                return appliesToInfo;
+                return appliesToInfo || noUserRequired;
             }
-            // Everything else from here is user-based
+            /**
+             * If a User object was supplied and "config:info" was present, then
+             * this shouldn't be matched, because it can't be an info message.
+             *
+             * TODO: If message types should be matched more reliably, there
+             * should probably be an extra message type parameter instead of
+             * reyling on whether an User object was supplied.
+             */
             if (user != null && appliesToInfo) {
                 return false;
             }
@@ -523,6 +574,10 @@ public class Highlighter {
             return noSound;
         }
         
+        public boolean hasError() {
+            return error;
+        }
+
     }
     
 }

@@ -1,6 +1,10 @@
 
 package chatty.util.api;
 
+import chatty.util.api.CommunitiesManager.Community;
+import chatty.util.api.StreamInfo.StreamType;
+import java.util.List;
+
 /**
  * A single datapoint in the stream info history, holding information about
  * stream status like viewers, title, game etc.
@@ -16,29 +20,43 @@ public class StreamInfoHistoryItem {
     private final String statusAndGame;
     private final long time;
     private final String title;
+    private final StreamType streamType;
+    private final List<Community> community;
+    private final long streamDuration;
+    private final long streamDurationWithPicnic;
     
-    public StreamInfoHistoryItem() {
+    public StreamInfoHistoryItem(long time) {
         this.viewers = -1;
         this.status = null;
         this.game = null;
         this.online = false;
         this.statusAndGame = null;
-        this.time = System.currentTimeMillis();
+        this.time = time;
         this.title = "Stream offline";
+        this.streamType = null;
+        this.community = null;
+        this.streamDuration = -1;
+        this.streamDurationWithPicnic = -1;
     }
     
-    public StreamInfoHistoryItem(int viewers, String status, String game) {
+    public StreamInfoHistoryItem(long time, int viewers, String status, String game,
+            StreamType streamType, List<Community> community, long startedTime,
+            long startedTimeWithPicnic) {
         this.viewers = viewers;
         this.status = status;
         this.game = game;
         this.online = true;
         this.statusAndGame = status+game;
-        this.time = System.currentTimeMillis();
+        this.time = time;
         if (status == null) {
             title = "No stream title set";
         } else {
             title = status;
         }
+        this.streamType = streamType;
+        this.community = community;
+        this.streamDuration = startedTime;
+        this.streamDurationWithPicnic = startedTimeWithPicnic;
     }
     
     public int getViewers() {
@@ -78,6 +96,22 @@ public class StreamInfoHistoryItem {
     
     public long getTime() {
         return time;
+    }
+    
+    public List<Community> getCommunities() {
+        return community;
+    }
+    
+    public StreamType getStreamType() {
+        return streamType;
+    }
+    
+    public long getStreamDuration() {
+        return streamDuration;
+    }
+    
+    public long getStreamDurationWithPicnic() {
+        return streamDurationWithPicnic;
     }
     
 }

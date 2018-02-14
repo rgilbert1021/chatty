@@ -4,9 +4,11 @@ package chatty.util.api;
 import chatty.Logging;
 import chatty.util.DateTime;
 import chatty.util.JSONUtil;
-import chatty.util.api.CommunitiesManager.Community;
+import chatty.util.StringUtil;
+import chatty.util.api.StreamInfo.StreamType;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -191,7 +193,7 @@ public class StreamInfoManager {
         if (stream == null || stream.isEmpty()) {
             return invalidStreamInfo;
         }
-        stream = stream.toLowerCase(Locale.ENGLISH);
+        stream = StringUtil.toLowerCase(stream);
         StreamInfo cached = cachedStreamInfo.get(stream);
         if (cached == null) {
             cached = new StreamInfo(stream, listener);
@@ -483,14 +485,30 @@ public class StreamInfoManager {
         String game;
         String name;
         String display_name;
+        StreamType streamType;
         long timeStarted = -1;
         String userId = null;
-        String community_id = null;
+        List<String> community_ids;
         boolean noChannelObject = false;
         try {
             // Get stream data
             viewersTemp = (Number) stream.get("viewers");
-            community_id = JSONUtil.getString(stream, "community_id");
+            community_ids = JSONUtil.getStringList(stream, "community_ids");
+            
+            // Stream Type
+            switch (JSONUtil.getString(stream, "stream_type")) {
+                case "watch_party":
+                    streamType = StreamType.WATCH_PARTY;
+                    break;
+                case "rerun":
+                    streamType = StreamType.RERUN;
+                    break;
+                case "premiere":
+                    streamType = StreamType.PREMIERE;
+                    break;
+                default:
+                    streamType = StreamType.LIVE;
+            }
             
             // Get channel data
             JSONObject channel = (JSONObject) stream.get("channel");
@@ -502,6 +520,7 @@ public class StreamInfoManager {
             game = (String) channel.get("game");
             name = (String) channel.get("name");
             display_name = (String) channel.get("display_name");
+            
             userId = String.valueOf(JSONUtil.getLong(channel, "_id", -1));
             if (userId.equals("-1")) {
                 userId = JSONUtil.getString(channel, "_id");
@@ -552,11 +571,19 @@ public class StreamInfoManager {
             // If not already done, send userId to UserIDs manager
             api.setUserId(name, userId);
         }
-        api.getCommunity(community_id, (r,e) -> { streamInfo.setCommunity(r); });
+        
+        // Community (if cached, will immediately set Community correct again
+        // for use in history, otherwise requested async and not in this history
+        // item)
+        streamInfo.setCommunities(null);
+        //api.getCommunity(community_id, (r,e) -> { streamInfo.setCommunity(r); });
+        //System.out.println("requesting: "+community_ids);
+        api.getCommunities(community_ids, (r,e) -> { streamInfo.setCommunities(r); });
+        
         if (follows) {
-            streamInfo.setFollowed(status, game, viewers, timeStarted);
+            streamInfo.setFollowed(status, game, viewers, timeStarted, streamType);
         } else {
-            streamInfo.set(status, game, viewers, timeStarted);
+            streamInfo.set(status, game, viewers, timeStarted, streamType);
         }
         return streamInfo;
     }

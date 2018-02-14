@@ -5,6 +5,7 @@ import chatty.gui.MainGui;
 import static chatty.gui.components.admin.AdminDialog.SMALL_BUTTON_INSETS;
 import static chatty.gui.components.admin.AdminDialog.hideableLabel;
 import static chatty.gui.components.admin.AdminDialog.makeGbc;
+import chatty.lang.Language;
 import chatty.util.DateTime;
 import chatty.util.StringUtil;
 import chatty.util.api.ChannelInfo;
@@ -17,10 +18,9 @@ import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
-import java.util.Iterator;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Objects;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -47,27 +47,28 @@ public class StatusPanel extends JPanel {
     
     private final JTextArea status = new JTextArea();
     private final JTextField game = new JTextField(20);
-    private final JTextField community = new JTextField(20);
-    private final JButton update = new JButton("Update");
+    private final JTextArea community = new JTextArea();
+    private final JButton update = new JButton(Language.getString("admin.button.update"));
     private final JLabel updated = new JLabel("No info loaded");
     private final JLabel putResult = new JLabel("...");
-    private final JButton selectGame = new JButton("Select game");
-    private final JButton removeGame = new JButton("Remove");
-    private final JButton selectCommunity = new JButton("Select community");
-    private final JButton removeCommunity = new JButton("Remove");
-    private final JButton reloadButton = new JButton("reload");
-    private final JButton historyButton = new JButton("Presets");
-    private final JButton addToHistoryButton = new JButton("Fav");
+    private final JButton selectGame = new JButton(Language.getString("admin.button.selectGame"));
+    private final JButton removeGame = new JButton(Language.getString("admin.button.removeGame"));
+    private final JButton selectCommunity = new JButton(Language.getString("admin.button.selectCommunity"));
+    private final JButton removeCommunity = new JButton(Language.getString("admin.button.removeCommunity"));
+    private final JButton reloadButton = new JButton(Language.getString("admin.button.reload"));
+    private final JButton historyButton = new JButton(Language.getString("admin.button.presets"));
+    private final JButton addToHistoryButton = new JButton(Language.getString("admin.button.fav"));
     private final SelectGameDialog selectGameDialog;
     private final SelectCommunityDialog selectCommunityDialog;
     private final StatusHistoryDialog statusHistoryDialog;
     
+    private final AdminDialog parent;
     private final MainGui main;
     private final TwitchApi api;
     
     private String currentChannel;
     private boolean statusEdited;
-    private Community currentCommunity = Community.EMPTY;
+    private final List<Community> currentCommunities = new ArrayList<>();
     private long infoLastLoaded;
     
     private boolean loading;
@@ -81,6 +82,7 @@ public class StatusPanel extends JPanel {
     
     public StatusPanel(AdminDialog parent, MainGui main, TwitchApi api) {
         
+        this.parent = parent;
         this.main = main;
         this.api = api;
         
@@ -178,17 +180,23 @@ public class StatusPanel extends JPanel {
         add(removeGame,gbc);
         
         community.setEditable(false);
+        community.setBackground(game.getBackground());
+        community.setBorder(game.getBorder());
+        community.setLineWrap(true);
+        community.setWrapStyleWord(true);
         gbc = makeGbc(0,4,1,1);
         gbc.fill = GridBagConstraints.HORIZONTAL;
         add(community, gbc);
         
         selectCommunity.setMargin(SMALL_BUTTON_INSETS);
         gbc = makeGbc(1,4,1,1);
+        gbc.anchor = GridBagConstraints.NORTH;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         add(selectCommunity, gbc);
         
         removeCommunity.setMargin(SMALL_BUTTON_INSETS);
         gbc = makeGbc(2,4,1,1);
+        gbc.anchor = GridBagConstraints.NORTH;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         add(removeCommunity, gbc);
         
@@ -228,13 +236,13 @@ public class StatusPanel extends JPanel {
                     statusEdited();
                 } else if (e.getSource() == selectCommunity) {
                     selectCommunityDialog.setLocationRelativeTo(StatusPanel.this);
-                    CommunitiesManager.Community result = selectCommunityDialog.open(currentCommunity);
+                    List<CommunitiesManager.Community> result = selectCommunityDialog.open(currentCommunities);
                     if (result != null) {
-                        setCommunity(result);
+                        setCommunities(result);
                         statusEdited();
                     }
                 } else if (e.getSource() == removeCommunity) {
-                    setCommunity(null);
+                    setCommunities(null);
                     statusEdited();
                 } else if (e.getSource() == historyButton) {
                     StatusHistoryEntry result = statusHistoryDialog.showDialog(game.getText());
@@ -247,8 +255,8 @@ public class StatusPanel extends JPanel {
                         if (result.game != null) {
                             game.setText(result.game);
                         }
-                        if (result.community != null) {
-                            setCommunity(result.community);
+                        if (result.communities != null) {
+                            setCommunities(result.communities);
                         }
                     }
                 } else if (e.getSource() == addToHistoryButton) {
@@ -271,25 +279,26 @@ public class StatusPanel extends JPanel {
         currentChannel = channel;
         status.setText("");
         game.setText("");
-        setCommunity(null);
+        setCommunities(null);
         
         // This will reset last loaded anyway
         getChannelInfo();
     }
     
-    private void setCommunity(Community c) {
+    private void setCommunities(List<Community> c) {
+        currentCommunities.clear();
         if (c == null) {
-            currentCommunity = Community.EMPTY;
             community.setText(null);
         } else {
-            currentCommunity = c;
-            community.setText(c.toString());
+            currentCommunities.addAll(c);
+            community.setText(StringUtil.join(c, ", "));
         }
+        parent.pack();
     }
     
     private void putCommunity() {
         final String channel = currentChannel;
-        api.setCommunity(currentChannel, currentCommunity.getId(), error -> {
+        api.setCommunities(currentChannel, currentCommunities, error -> {
             if (currentChannel.equals(channel)) {
                 if (error != null) {
                     communityPutResult = "Failed setting community.";
@@ -336,7 +345,7 @@ public class StatusPanel extends JPanel {
      */
     public void setPutResult(TwitchApi.RequestResultCode result) {
         if (result == TwitchApi.RequestResultCode.SUCCESS) {
-            statusPutResult = "Info updated.";
+            statusPutResult = Language.getString("admin.infoUpdated");
         } else {
             if (result == TwitchApi.RequestResultCode.ACCESS_DENIED) {
                 statusPutResult = "Changing info: Access denied";
@@ -378,24 +387,28 @@ public class StatusPanel extends JPanel {
         setLoading(true);
         main.getChannelInfo(currentChannel);
         final String channel = currentChannel;
-        api.getCommunityForChannel(currentChannel, (r, e) -> {
+        api.getCommunitiesForChannel(currentChannel, (r, e) -> {
             if (currentChannel.equals(channel)) {
                 if (r == null) {
                     communityLoadError = e == null ? "" : e;
                 } else {
-                    setCommunity(r);
+                    setCommunities(r);
                 }
                 loadingCommunity = false;
                 checkLoadingDone();
             }
-            updateCommunityName(r);
+            if (r != null) {
+                for (Community c : r) {
+                    updateCommunityName(c);
+                }
+            }
         });
     }
     
     private void checkLoadingDone() {
         if (!loadingStatus && !loadingCommunity) {
             statusEdited = false;
-            updated.setText("Info last loaded: just now");
+            updated.setText(Language.getString("admin.infoLoaded.now"));
             if (statusPutResult != null || communityPutResult != null) {
                 setPutResult(statusPutResult+" / "+communityPutResult);
                 statusPutResult = null;
@@ -434,7 +447,7 @@ public class StatusPanel extends JPanel {
      */
     private void setLoading(boolean loading) {
         if (loading) {
-            updated.setText("Loading..");
+            updated.setText(Language.getString("admin.loading"));
             lastPutResult = -1;
         }
         update.setEnabled(!loading);
@@ -451,9 +464,11 @@ public class StatusPanel extends JPanel {
     public void update() {
         if (!loading && infoLastLoaded > 0) {
             long timePassed = System.currentTimeMillis() - infoLastLoaded;
-            updated.setText("Info last loaded: "
-                    + DateTime.duration(timePassed, 1, 0) + " ago"
-                    + (statusEdited ? " (edited)" : ""));
+            if (statusEdited) {
+                updated.setText(Language.getString("admin.infoLoaded.edited", DateTime.duration(timePassed, 1, 0)));
+            } else {
+                updated.setText(Language.getString("admin.infoLoaded", DateTime.duration(timePassed, 1, 0)));
+            }
         }
         if (loading && lastPutResult > 0) {
             long ago = System.currentTimeMillis() - lastPutResult;
@@ -478,7 +493,7 @@ public class StatusPanel extends JPanel {
         main.getStatusHistory().updateCommunityName(c);
         Map<String, String> communities = main.getCommunityFavorites();
         if (communities.containsKey(c.getId())) {
-            communities.put(c.getId(), c.getName());
+            communities.put(c.getId(), c.getCapitalizedName());
             main.setCommunityFavorites(communities);
         }
     }
@@ -502,8 +517,8 @@ public class StatusPanel extends JPanel {
         String currentTitle = status.getText().trim();
         String currentGame = game.getText();
         if (main.getSaveStatusHistorySetting()
-                || main.getStatusHistory().isFavorite(currentTitle, currentGame, currentCommunity)) {
-            main.getStatusHistory().addUsed(currentTitle, currentGame, currentCommunity);
+                || main.getStatusHistory().isFavorite(currentTitle, currentGame, currentCommunities)) {
+            main.getStatusHistory().addUsed(currentTitle, currentGame, currentCommunities);
         }
     }
     
@@ -511,7 +526,7 @@ public class StatusPanel extends JPanel {
      * Adds the current status to the preset favorites
      */
     private void addCurrentToFavorites() {
-        main.getStatusHistory().addFavorite(status.getText().trim(), game.getText(), currentCommunity);
+        main.getStatusHistory().addFavorite(status.getText().trim(), game.getText(), currentCommunities);
     }
     
 }
