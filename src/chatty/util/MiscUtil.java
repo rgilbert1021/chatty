@@ -97,20 +97,17 @@ public class MiscUtil {
      * @param from The file to move
      * @param to The target filename, which will be overwritten if it already
      * exists
+     * @throws java.io.IOException
      */
-    public static void moveFile(Path from, Path to) {
+    public static void moveFile(Path from, Path to) throws IOException {
         try {
             Files.move(from, to, ATOMIC_MOVE);
         } catch (IOException ex) {
-            LOGGER.warning("Error moving file "+from+": " + ex);
-            System.out.println("Error moving file "+from+": " + ex);
-
-            try {
-                Files.move(from, to, REPLACE_EXISTING);
-            } catch (IOException ex2) {
-                LOGGER.warning("Error moving file "+from+" (2): " + ex2);
-                System.out.println("Error moving file "+from+" (2): " + ex2);
-            }
+            // Based on the Files.move() docs it may throw an IOException when
+            // the target file already exists (implementation specific), so try
+            // alternate move on that instead of AtomicMoveNotSupportedException
+            LOGGER.info("ATOMIC_MOVE failed: "+ex);
+            Files.move(from, to, REPLACE_EXISTING);
         }
     }
     

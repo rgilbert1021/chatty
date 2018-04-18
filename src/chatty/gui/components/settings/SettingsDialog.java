@@ -43,8 +43,8 @@ public class SettingsDialog extends JDialog implements ActionListener {
     
     private final static Logger LOGGER = Logger.getLogger(SettingsDialog.class.getName());
     
-    private final JButton ok = new JButton("Save");
-    private final JButton cancel = new JButton("Cancel");
+    private final JButton ok = new JButton(Language.getString("dialog.button.save"));
+    private final JButton cancel = new JButton(Language.getString("dialog.button.cancel"));
     
     private final Set<String> restartRequiredDef = new HashSet<>(Arrays.asList(
             "ffz", "nod3d", "noddraw",
@@ -102,7 +102,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
         SOUNDS("Sounds", Language.getString("settings.page.sound")),
         AUTOREPLY("Auto Reply", Language.getString("settings.page.autoReply")),
         USERCOLORS("Usercolors", Language.getString("settings.page.usercolors")),
-        LOGGING("Logging", Language.getString("settings.page.logging")),
+        LOGGING("Log to file", Language.getString("settings.page.logging")),
         WINDOW("Window", Language.getString("settings.page.window")),
         TABS("Tabs", Language.getString("settings.page.tabs")),
         COMMANDS("Commands", Language.getString("settings.page.commands")),
@@ -213,7 +213,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
         gbc.weightx = 0;
         gbc.weighty = 1;
         add(selection, gbc);
-        
+
         // Create setting pages, the order here doesn't matter
         cardManager = new CardLayout();
         cards = new JPanel(cardManager);
@@ -322,6 +322,7 @@ public class SettingsDialog extends JDialog implements ActionListener {
         stuffBasedOnPanel();
         selection.requestFocusInWindow();
         
+        pack();
         setVisible(true);
     }
     
@@ -732,9 +733,9 @@ public class SettingsDialog extends JDialog implements ActionListener {
      * @param height
      * @return 
      */
-    protected ListSelector addListSetting(String name, int width, int height, 
+    protected ListSelector addListSetting(String name, String title, int width, int height, 
             boolean manualSorting, boolean alphabeticSorting) {
-        ListSelector result = new ListSelector(this, manualSorting, alphabeticSorting);
+        ListSelector result = new ListSelector(this, title, manualSorting, alphabeticSorting);
         result.setPreferredSize(new Dimension(width, height));
         listSettings.put(name, result);
         return result;

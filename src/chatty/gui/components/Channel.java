@@ -1,6 +1,7 @@
 
 package chatty.gui.components;
 
+import chatty.Room;
 import chatty.gui.MouseClickedListener;
 import chatty.gui.StyleManager;
 import chatty.gui.StyleServer;
@@ -68,16 +69,17 @@ public class Channel extends JPanel {
     private boolean userlistEnabled = true;
     private int previousUserlistWidth;
     private int userlistMinWidth;
-    
-    private String name;
 
-    public Channel(final String name, Type type, MainGui main, StyleManager styleManager,
+    private Room room;
+
+    public Channel(final Room room, Type type, MainGui main, StyleManager styleManager,
             ContextMenuListener contextMenuListener) {
         this.setLayout(new BorderLayout());
         this.styleManager = styleManager;
-        this.name = name;
         this.main = main;
         this.type = type;
+        this.room = room;
+        setName(room.getDisplayName());
         
         // Text Pane
         text = new ChannelTextPane(main,styleManager);
@@ -94,9 +96,9 @@ public class Channel extends JPanel {
         
         // PageUp/Down hotkeys / Scrolling
         InputMap westScrollInputMap = west.getInputMap(WHEN_IN_FOCUSED_WINDOW);
-        westScrollInputMap.put(KeyStroke.getKeyStroke("PAGE_UP"), "pageUp");
+        westScrollInputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_UP, 0), "pageUp");
         west.getActionMap().put("pageUp", new ScrollAction("pageUp", west.getVerticalScrollBar()));
-        westScrollInputMap.put(KeyStroke.getKeyStroke("PAGE_DOWN"), "pageDown");
+        westScrollInputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_DOWN, 0), "pageDown");
         west.getActionMap().put("pageDown", new ScrollAction("pageDown", west.getVerticalScrollBar()));
         west.getVerticalScrollBar().setUnitIncrement(40);
 
@@ -116,7 +118,9 @@ public class Channel extends JPanel {
         input = new ChannelEditBox(40);
         input.addActionListener(main.getActionListener());
         input.setCompletionServer(new InputCompletionServer());
-        
+        // Remove PAGEUP/DOWN so it can scroll chat (as before JTextArea)
+        input.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_UP, 0), "-");
+        input.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_DOWN, 0), "-");
 
         // Add components
         add(mainPane, BorderLayout.CENTER);
@@ -129,9 +133,8 @@ public class Channel extends JPanel {
 
             @Override
             public void insertUpdate(DocumentEvent e) {
-                String name = Channel.this.name;
-                if (onceOffEditListener != null && !name.isEmpty()) {
-                    onceOffEditListener.edited(name);
+                if (onceOffEditListener != null && room != Room.EMPTY) {
+                    onceOffEditListener.edited(room.getChannel());
                     onceOffEditListener = null;
                 }
             }
@@ -144,6 +147,20 @@ public class Channel extends JPanel {
             public void changedUpdate(DocumentEvent e) {
             }
         });
+    }
+    
+    public boolean setRoom(Room room) {
+        if (room != null && this.room != room) {
+            this.room = room;
+            refreshBufferSize();
+            setName(room.getDisplayName());
+            return true;
+        }
+        return false;
+    }
+    
+    public Room getRoom() {
+        return room;
     }
     
     public void cleanUp() {
@@ -168,27 +185,36 @@ public class Channel extends JPanel {
         text.setMouseClickedListener(listener);
     }
     
+    public String getChannel() {
+        return room.getChannel();
+    }
+    
+    @Override
+    public String getToolTipText() {
+        return room.getChannel();
+    }
+    
+    public String getFilename() {
+        return room.getFilename();
+    }
+    
     @Override
     public String getName() {
-        return name;
+        return room != null ? room.getDisplayName() : null;
+    }
+    
+    public String getOwnerChannel() {
+        return room.getOwnerChannel();
     }
     
     /**
      * Gets the name of the stream (without leading #) if it is a stream channel
      * (and thus has a leading #) ;)
-     * @return 
+     * 
+     * @return The stream name, may return null
      */
     public String getStreamName() {
-        if (name.startsWith("#")) {
-            return name.substring(1);
-        }
-        return null;
-    }
-    
-    @Override
-    public void setName(String name) {
-        this.name = name;
-        refreshBufferSize();
+        return room.getStream();
     }
     
     public void addUser(User user) {
@@ -241,7 +267,7 @@ public class Channel extends JPanel {
             "/ban ", "/to ", "/setname ", "/resetname ", "/timeout ", "/host ",
             "/unban ", "/ignore ", "/unignore ", "/ignoreChat ", "/unignoreChat ",
             "/ignoreWhisper ", "/unignoreWhisper ", "/follow ", "/unfollow ",
-            "/untimeout "
+            "/untimeout ", "/favorite ", "/unfavorite "
         }));
         
         private void updateSettings() {
@@ -537,14 +563,16 @@ public class Channel extends JPanel {
     public boolean requestFocusInWindow() {
         // Invoke later, because otherwise it wouldn't get focus for some
         // reason.
-        SwingUtilities.invokeLater(new Runnable() {
-
-            @Override
-            public void run() {
-                //System.out.println("requesting focus for " + name);
-                input.requestFocusInWindow();
-            }
-        });
+        
+        // Commented out for testing
+//        SwingUtilities.invokeLater(new Runnable() {
+//
+//            @Override
+//            public void run() {
+//                //System.out.println("requesting focus for " + name);
+//                input.requestFocusInWindow();
+//            }
+//        });
         return input.requestFocusInWindow();
         
     }
@@ -597,7 +625,7 @@ public class Channel extends JPanel {
     }
     
     private void refreshBufferSize() {
-        Long bufferSize = (Long)main.getSettings().mapGet("bufferSizes", StringUtil.toLowerCase(name));
+        Long bufferSize = (Long)main.getSettings().mapGet("bufferSizes", StringUtil.toLowerCase(getChannel()));
         text.setBufferSize(bufferSize != null ? bufferSize.intValue() : -1);
     }
     
@@ -732,7 +760,7 @@ public class Channel extends JPanel {
         
     @Override
     public String toString() {
-        return String.format("%s '%s'", type, name);
+        return String.format("%s '%s'", type, room);
     }
     
     private OnceOffEditListener onceOffEditListener;

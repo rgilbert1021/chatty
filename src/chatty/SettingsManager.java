@@ -3,6 +3,7 @@ package chatty;
 
 import chatty.gui.HtmlColors;
 import chatty.gui.WindowStateManager;
+import chatty.gui.components.settings.NotificationSettings;
 import chatty.gui.notifications.Notification;
 import chatty.util.BackupManager;
 import chatty.util.DateTime;
@@ -285,9 +286,11 @@ public class SettingsManager {
 
         // History / Favorites
         settings.addMap("channelHistory",new TreeMap(), Setting.LONG);
-        settings.setFile("channelHistory", historyFile);
+        //settings.setFile("channelHistory", historyFile);
         settings.addList("channelFavorites", new ArrayList(), Setting.STRING);
-        settings.setFile("channelFavorites", historyFile);
+        //settings.setFile("channelFavorites", historyFile);
+        settings.addMap("roomFavorites", new HashMap(), Setting.LIST);
+        //settings.setFile("roomFavorites", historyFile);
         settings.addLong("channelHistoryKeepDays", 30);
         settings.addBoolean("saveChannelHistory", true);
         settings.addBoolean("historyClear", true);
@@ -299,15 +302,15 @@ public class SettingsManager {
 
         // Game Presets
         settings.addList("gamesFavorites",new ArrayList(), Setting.STRING);
-        settings.setFile("gamesFavorites", historyFile);
+        //settings.setFile("gamesFavorites", historyFile);
         
         // Community Presets
         settings.addMap("communityFavorites", new HashMap(), Setting.STRING);
-        settings.setFile("communityFavorites", historyFile);
+        //settings.setFile("communityFavorites", historyFile);
 
         // Stream Status Presets
         settings.addList("statusPresets", new ArrayList(), Setting.LIST);
-        settings.setFile("statusPresets", statusPresetsFile);
+        //settings.setFile("statusPresets", statusPresetsFile);
 
         settings.addBoolean("saveStatusHistory", true);
         settings.addBoolean("statusHistoryClear", true);
@@ -414,9 +417,7 @@ public class SettingsManager {
         settings.addBoolean("ignoreOfflineNotifications", false);
         settings.addBoolean("requestFollowedStreams", true);
         
-        settings.addBoolean("useCustomNotifications", true);
-        
-        settings.addLong("nType", 0);
+        settings.addLong("nType", NotificationSettings.NOTIFICATION_TYPE_CUSTOM);
         settings.addLong("nScreen", -1);
         settings.addLong("nPosition", 3);
         settings.addLong("nDisplayTime", 10);
@@ -485,6 +486,7 @@ public class SettingsManager {
         settings.addBoolean("highlightNextMessages", false);
         settings.addBoolean("highlightIgnored", false);
         settings.addList("noHighlightUsers", new ArrayList(), Setting.STRING);
+        settings.addList("highlightBlacklist", new ArrayList(), Setting.STRING);
 
         // Ignore
         settings.addList("ignore", new ArrayList(), Setting.STRING);
@@ -502,6 +504,7 @@ public class SettingsManager {
 
         // Chat Logging
         settings.addString("logMode", "always");
+        settings.addBoolean("logMessage", true);
         settings.addBoolean("logMod", true);
         settings.addBoolean("logJoinPart", false);
         settings.addBoolean("logBan", true);
@@ -528,7 +531,7 @@ public class SettingsManager {
         settings.addBoolean("completionAllNameTypes", true);
         settings.addBoolean("completionPreferUsernames", true);
         settings.addBoolean("completionAllNameTypesRestriction", true);
-        settings.addString("completionTab", "names");
+        settings.addString("completionTab", "both");
         settings.addString("completionTab2", "emotes");
 
         // Stream Chat
@@ -715,6 +718,40 @@ public class SettingsManager {
                         + ".Approve=/Automod_approve\n"
                         + ".Deny=/Automod_deny");
             }
+        }
+        if (switchedFromVersionBefore("0.9.1b3")) {
+            /**
+             * Migrate both favorites and history, but only channels that don't
+             * have a value in the new setting yet.
+             * 
+             * This won't turn an already existing entry into a favorite even if
+             * it was a favorite before, however this usually shouldn't be an
+             * issue (except in some cases where 0.9.1b2 was used before, where
+             * not all favorites were migrated correctly).
+             */
+            LOGGER.info("Migrating Favorites/History");
+            List<String> favs = settings.getList("channelFavorites");
+            Map<String, Long> history = settings.getMap("channelHistory");
+            Map<String, List> data = settings.getMap("roomFavorites");
+            // Migrate history
+            for (String stream : history.keySet()) {
+                boolean isFavorite = favs.contains(stream);
+                long lastJoined = history.get(stream);
+                String channel = Helper.toChannel(stream);
+                if (!data.containsKey(channel)) {
+                    data.put(channel, new ChannelFavorites.Favorite(
+                            Room.createRegular(channel), lastJoined, isFavorite).toList());
+                }
+            }
+            // Migrate favorites
+            for (String fav : favs) {
+                String channel = Helper.toChannel(fav);
+                if (!data.containsKey(channel)) {
+                    data.put(channel, new ChannelFavorites.Favorite(
+                            Room.createRegular(channel), -1, true).toList());
+                }
+            }
+            settings.putMap("roomFavorites", data);
         }
         overrideHotkeySettings();
     }

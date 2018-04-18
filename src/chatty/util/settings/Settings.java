@@ -8,6 +8,7 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map.Entry;
@@ -788,6 +789,9 @@ public class Settings {
             }
         }
         
+        if (obj.isEmpty()) {
+            return null;
+        }
         return obj.toJSONString();
     }
     
@@ -885,16 +889,31 @@ public class Settings {
     }
     
     private void saveSettingsToJson(String fileName) {
-        LOGGER.info("Saving settings to file: "+fileName);
         String json = settingsToJson(fileName);
         Path file = Paths.get(fileName);
-        Path tempFile = Paths.get(fileName+"-temp");
-        try (BufferedWriter writer = Files.newBufferedWriter(tempFile, CHARSET)) {
-            writer.write(json);
-            MiscUtil.moveFile(tempFile, file);
-        } catch (IOException ex) {
-            LOGGER.warning("Error saving settings to file: "+ex);
-            System.out.println("Error saving settings to file: "+ex);
+        if (json == null) {
+            try {
+                if (Files.exists(file)) {
+                    LOGGER.info("Removing unused file: "+fileName);
+                    Files.delete(file);
+                }
+            } catch (NoSuchFileException ex) {
+                // Don't need to remove non-existing file
+            } catch (IOException ex) {
+                LOGGER.warning("Error removing unused file: "+ex);
+            }
+        } else {
+            LOGGER.info("Saving settings to file: "+fileName);
+            try {
+                Path tempFile = Paths.get(fileName + "-temp");
+                try (BufferedWriter writer = Files.newBufferedWriter(tempFile, CHARSET)) {
+                    writer.write(json);
+                }
+                MiscUtil.moveFile(tempFile, file);
+            } catch (IOException ex) {
+                LOGGER.warning("Error saving settings to file: " + ex);
+                System.out.println("Error saving settings to file: " + ex);
+            }
         }
     }
 
@@ -920,16 +939,7 @@ public class Settings {
                 try {
                     settingsFromJson(input);
                 } catch (ParseException ex) {
-                    int pos = ex.getPosition();
-                    int start = pos - 10;
-                    int end = pos + 10;
-                    start = start < 0 ? 0 : start;
-                    end = end > input.length() ? input.length() : end;
-                    String excerpt = input.substring(start, pos)+"@"+input.substring(pos, end);
-                    LOGGER.warning("Error parsing settings: " + ex+ "["+excerpt+"]");
-                    LOGGER.log(Logging.USERINFO, String.format("Settings file corrupt, using default settings (%s) [%s]",
-                            fileName,
-                            excerpt));
+                    logParseError(fileName, input, ex);
                 }
             } else {
                 LOGGER.warning("Settings file empty: "+fileName);
@@ -938,6 +948,19 @@ public class Settings {
         } catch (IOException ex) {
             LOGGER.warning("Error loading settings from file: "+ex);
         }
+    }
+    
+    private static void logParseError(String fileName, String input, ParseException ex) {
+        int pos = ex.getPosition();
+        int start = pos - 10;
+        int end = pos + 10;
+        start = start < 0 ? 0 : start;
+        end = end > input.length() ? input.length() : end;
+        String excerpt = input.substring(start, pos) + "@" + input.substring(pos, end);
+        LOGGER.warning("Error parsing settings: " + ex + "[" + excerpt + "]");
+        LOGGER.log(Logging.USERINFO, String.format("Settings file corrupt, using default settings (%s) [%s]",
+                fileName,
+                excerpt));
     }
     
     public Collection<String> getSettingNames() {

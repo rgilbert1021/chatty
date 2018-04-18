@@ -2,6 +2,7 @@
 package chatty.gui;
 
 import chatty.Helper;
+import chatty.gui.components.textpane.ChannelTextPane;
 import chatty.util.MiscUtil;
 import chatty.util.ProcessManager;
 import chatty.util.commands.CustomCommand;
@@ -148,8 +149,8 @@ public class GuiUtil {
      * @param xOffset The horizontal offset in pixels
      * @return {@code true} if the point is on screen, {@code false} otherwise
      */
-    public static boolean isPointOnScreen(Point p, int xOffset) {
-        Point moved = new Point(p.x + xOffset, p.y);
+    public static boolean isPointOnScreen(Point p, int xOffset, int yOffset) {
+        Point moved = new Point(p.x + xOffset, p.y + yOffset);
         return isPointOnScreen(moved);
     }
     
@@ -215,7 +216,7 @@ public class GuiUtil {
     /**
      * Detect retina display.
      * 
-     * http://stackoverflow.com/questions/20767708/how-do-you-detect-a-retina-display-in-java
+     * https://stackoverflow.com/questions/20767708/how-do-you-detect-a-retina-display-in-java
      * 
      * @return 
      */
@@ -329,7 +330,7 @@ public class GuiUtil {
     }
     
     /**
-     * Based on: http://stackoverflow.com/a/7253059/2375667
+     * Based on: https://stackoverflow.com/a/7253059/2375667
      */
     private static void addMacKeyboardActionsTo(String key) {
         InputMap im = (InputMap) UIManager.get(key);
@@ -419,6 +420,25 @@ public class GuiUtil {
                 String oldV = evt.getOldValue() != null ? evt.getOldValue().getClass().toString() : null;
                 String newV = evt.getNewValue() != null ? evt.getNewValue().getClass().toString() : null;
                 //System.out.println(evt.getPropertyName()+": "+oldV+" -> "+newV);
+            }
+        });
+    }
+    
+    public static void focusTest() {
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addVetoableChangeListener(new VetoableChangeListener() {
+
+            @Override
+            public void vetoableChange(PropertyChangeEvent evt) throws PropertyVetoException {
+                if (evt.getOldValue() != null) {
+                    System.out.println("from: "+evt.getOldValue().getClass().getName()+" ("+evt.getPropertyName()+")");
+                }
+                if (evt.getNewValue() != null) {
+                    System.out.println("to: "+evt.getNewValue().getClass().getName()+" ("+evt.getPropertyName()+")");
+                }
+                if (evt.getNewValue() instanceof ChannelTextPane) {
+                    //System.out.println("prevent");
+                    //throw new PropertyVetoException("abc", evt);
+                }
             }
         });
     }

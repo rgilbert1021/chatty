@@ -5,12 +5,16 @@ import chatty.gui.colors.UsercolorManager;
 import chatty.util.api.usericons.UsericonManager;
 import chatty.ChannelStateManager.ChannelStateListener;
 import chatty.util.BotNameManager;
-import chatty.util.MsgTags;
+import chatty.util.irc.MsgTags;
 import chatty.util.StringUtil;
+import chatty.util.api.RoomsInfo;
 import chatty.util.settings.Settings;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -81,19 +85,24 @@ public class TwitchConnection {
      * Holds the UserManager instance, which manages all the user objects.
      */
     protected UserManager users = new UserManager();
+    
+    private final RoomManager rooms;
 
     private final IrcConnection irc;
 
     private final TwitchCommands twitchCommands;
     private final SpamProtection spamProtection;
     private final ChannelStateManager channelStates = new ChannelStateManager();
+    
+    private final SentMessages sentMessages = new SentMessages();
 
     public TwitchConnection(final ConnectionListener listener, Settings settings,
-            String label) {
+            String label, RoomManager rooms) {
         irc = new IrcConnection(label);
         this.listener = listener;
         this.settings = settings;
         this.twitchCommands = new TwitchCommands(this);
+        this.rooms = rooms;
         spamProtection = new SpamProtection();
         spamProtection.setLinesPerSeconds(settings.getString("spamProtection"));
         users.setCapitalizedNames(settings.getBoolean("capitalizedNames"));
@@ -162,8 +171,12 @@ public class TwitchConnection {
         return spamProtection.toString();
     }
     
+    public void updateRoom(Room room) {
+        users.updateRoom(room);
+    }
+
     public User getUser(String channel, String name) {
-        return users.getUser(channel, name);
+        return users.getUser(rooms.getRoom(channel), name);
     }
     
     public User getExistingUser(String channel, String name) {
@@ -273,6 +286,17 @@ public class TwitchConnection {
         return onChannel;
     }
 
+    public boolean onOwnerChannel(String ownerChannel) {
+        if (irc.joinedChannels.contains(ownerChannel)) {
+            return true;
+        }
+        for (Room room : rooms.getRoomsByOwner(ownerChannel)) {
+            if (irc.joinedChannels.contains(room.getChannel())) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /**
      * Actually performs the reconnect.
@@ -375,11 +399,13 @@ public class TwitchConnection {
     }
 
     public String getConnectionInfo() {
-        String regular = irc.getConnectionInfo();
-        if (regular == null) {
+        if (irc.getConnectionInfo() == null) {
             return "Not connected.";
         }
-        return "Connected to: "+regular;
+        return String.format("Connected to: %s (%s, %s channels)",
+                irc.getConnectionInfo(),
+                irc.getConnectedSince(),
+                irc.joinedChannels.size());
     }
     
     public boolean autoRequestModsEnabled() {
@@ -391,7 +417,7 @@ public class TwitchConnection {
     }
     
     public User getLocalUser(String channel) {
-        return users.getUser(channel, username);
+        return users.getUser(rooms.getRoom(channel), username);
     }
     
     public void sendRaw(String text) {
@@ -421,9 +447,9 @@ public class TwitchConnection {
     public void sendCommandMessage(String channel, String message, String echo,
             MsgTags tags) {
         if (sendSpamProtectedMessage(channel, message, false, tags)) {
-            listener.onInfo(channel, echo);
+            info(channel, echo);
         } else {
-            listener.onInfo(channel, "# Command not sent to prevent ban: " + message);
+            info(channel, "# Command not sent to prevent ban: " + message);
         }
     }
     
@@ -447,6 +473,9 @@ public class TwitchConnection {
         if (!spamProtection.check()) {
             return false;
         } else {
+            if (Helper.isChatroomChannel(channel)) {
+                sentMessages.messageSent(channel, message);
+            }
             spamProtection.increase();
             if (action) {
                 irc.sendActionMessage(channel, message);
@@ -724,13 +753,13 @@ public class TwitchConnection {
             channel = StringUtil.toLowerCase(channel);
             joinChecker.joinAttempt(channel);
             if (this == irc) {
-                listener.onJoinAttempt(channel);
+                listener.onJoinAttempt(rooms.getRoom(channel));
                 openChannels.add(channel);
             }
         }
 
         @Override
-        void onJoin(String channel, String nick, String prefix) {
+        void onJoin(String channel, String nick) {
             channel = StringUtil.toLowerCase(channel);
             if (nick.equalsIgnoreCase(username)) {
                 /**
@@ -772,7 +801,7 @@ public class TwitchConnection {
         }
 
         @Override
-        void onPart(String channel, String nick, String prefix, String message) {
+        void onPart(String channel, String nick) {
             channel = StringUtil.toLowerCase(channel);
             if (nick.isEmpty()) {
                 return;
@@ -795,7 +824,7 @@ public class TwitchConnection {
                     // GUI shouldn't be necessary if this channel is closed since
                     // the GUI userlist is removed as well.
                     users.clear(channel);
-                    listener.onChannelLeft(channel);
+                    listener.onChannelLeft(rooms.getRoom(channel));
                     channelStates.reset(channel);
                 }
                 // Leaving the channel on the userlist connection means
@@ -817,7 +846,7 @@ public class TwitchConnection {
             if (!onChannel(channel)) {
                 return;
             }
-            User user = users.getUser(channel, nick);
+            User user = getUser(channel, nick);
             if (modeAdded) {
                 user.setMode(mode);
                 if (mode.equals("o")) {
@@ -917,14 +946,18 @@ public class TwitchConnection {
                 if (settings.getBoolean("twitchnotifyAsInfo") && nick.equals("twitchnotify")) {
                     // Just output as Notification, subs shouldn't come over this anymore (soon),
                     // but just in case
-                    listener.onInfo(channel, "[Notification] "+text);
+                    info(channel, "[Notification] "+text);
                 } else {
                     User user = userJoined(channel, nick);
                     updateUserFromTags(user, tags);
                     String emotesTag = tags.get("emotes");
                     String id = tags.get("id");
                     int bits = tags.getInteger("bits", 0);
-                    listener.onChannelMessage(user, text, action, emotesTag, id, bits);
+                    if (!user.getName().equals(username) || !sentMessages.shouldHide(channel, text)) {
+                        // Don't show if own name and message was sent recently,
+                        // to prevent echo message from being shown in chatrooms
+                        listener.onChannelMessage(user, text, action, emotesTag, id, bits);
+                    }
                 }
             }
         }
@@ -948,8 +981,18 @@ public class TwitchConnection {
                 listener.onInfo(text);
             } else if (onChannel(channel)) {
                 infoMessage(channel, text);
+            } else if (isChannelOpen(channel)) {
+                infoMessage(channel, text);
+                
+                Room room = rooms.getRoom(channel);
+                if (room.isChatroom()) {
+                    if (tags.isValue("msg-id", "no_permission")) {
+                        listener.onInfo(room, "Cancelled trying to join channel.");
+                        joinChecker.cancel(channel);
+                    }
+                }
             } else {
-                listener.onInfo(String.format("[Info/%s] %s", channel, text));
+                listener.onInfo(String.format("[Info/%s] %s", rooms.getRoom(channel), text));
             }
         }
         
@@ -972,19 +1015,19 @@ public class TwitchConnection {
             updateUserFromTags(user, tags);
             if (tags.isValue("msg-id", "resub") || tags.isValue("msg-id", "sub")
                     || tags.isValue("msg-id", "subgift")) {
-                listener.onSubscriberNotification(channel, user, text, message, months, emotes);
+                listener.onSubscriberNotification(user, text, message, months, emotes);
             } else if (tags.isValue("msg-id", "charity") && login.equals("twitch")) {
-                listener.onInfo(channel, "[Charity] "+text);
+                info(channel, "[Charity] "+text);
             } else if (tags.isValue("msg-id", "raid")) {
                 String m = text;
                 if (!message.isEmpty()) {
                     m += " ["+message+"]";
                 }
-                listener.onInfo(channel, "[Raid] "+m);
+                info(channel, "[Raid] "+m);
             } else {
                 // Just output like this if unknown, since Twitch keeps adding
                 // new messages types for this
-                listener.onInfo(channel, "[Usernotice] "+text);
+                info(channel, "[Usernotice] "+text);
             }
         }
 
@@ -1012,7 +1055,7 @@ public class TwitchConnection {
             if (text.startsWith("The moderators of")) {
                 parseModeratorsList(text, channel);
             } else {
-                listener.onInfo(channel, "[Info] " + text);
+                info(channel, "[Info] " + text);
             }
         }
 
@@ -1028,7 +1071,7 @@ public class TwitchConnection {
 
             // Get list of users from message
             List<String> modsList = TwitchCommands.parseModsList(text);
-            users.modsListReceived(channel, modsList);
+            users.modsListReceived(rooms.getRoom(channel), modsList);
 
             /**
              * Output messages only if either:
@@ -1042,13 +1085,13 @@ public class TwitchConnection {
              */
             if (!twitchCommands.waitingForModsSilent()
                     || (channel != null && !twitchCommands.removeModsSilent(channel))) {
-                listener.onInfo(channel, "[Info] " + text);
+                info(channel, "[Info] " + text);
 
                 // Output appropriate message
                 if (modsList.size() > 0) {
-                    listener.onInfo(channel, "There are " + modsList.size() + " mods for this channel.");
+                    info(channel, "There are " + modsList.size() + " mods for this channel.");
                 } else {
-                    listener.onInfo(channel, "There are no mods for this channel.");
+                    info(channel, "There are no mods for this channel.");
                 }
             } else {
                 debug("Silent mods list (" + channel + ")");
@@ -1064,7 +1107,7 @@ public class TwitchConnection {
          * the channel is unknown
          */
         private void channelCleared(String channel) {
-            listener.onChannelCleared(channel);
+            listener.onChannelCleared(rooms.getRoom(channel));
         }
 
         @Override
@@ -1185,10 +1228,10 @@ public class TwitchConnection {
                 if (parameters.length == 2) {
                     String target = parameters[0];
                     if (target.equals("-")) {
-                        listener.onHost(channel, null);
+                        listener.onHost(rooms.getRoom(channel), null);
                         channelStates.setHosting(channel, null);
                     } else {
-                        listener.onHost(channel, target);
+                        listener.onHost(rooms.getRoom(channel), target);
                         channelStates.setHosting(channel, target);
                     }
                 }
@@ -1222,7 +1265,7 @@ public class TwitchConnection {
                     }
                 }
             } else if (command.equals("SERVERCHANGE")) {
-                listener.onInfo(channel, "*** You may be on the wrong server "
+                listener.onInfo(rooms.getRoom(channel), "*** You may be on the wrong server "
                         + "for this channel. Enter /fixserver to connect to the "
                         + "correct server (which may cause other channels to not "
                         + "work anymore, because Chatty only supports one main "
@@ -1252,7 +1295,7 @@ public class TwitchConnection {
      * @return
      */
     public User userOffline(String channel, String name) {
-        User user = users.getUser(channel, name);
+        User user = getUser(channel, name);
         if (user != null) {
             user.setOnline(false);
             listener.onUserRemoved(user);
@@ -1269,14 +1312,13 @@ public class TwitchConnection {
      * @return The User
      */
     public User userJoined(String channel, String name) {
-        User user = users.getUser(channel, name);
+        User user = getUser(channel, name);
         return userJoined(user);
     }
 
     public User userJoined(User user) {
         if (user.setOnline(true)) {
-            String channel = user.getChannel();
-            if (channel.substring(1).equals(user.getName())) {
+            if (user.getName().equals(user.getStream())) {
                 user.setBroadcaster(true);
             }
             listener.onUserAdded(user);
@@ -1285,7 +1327,7 @@ public class TwitchConnection {
     }
     
     public void info(String channel, String message) {
-        listener.onInfo(channel, message);
+        listener.onInfo(rooms.getRoom(channel), message);
     }
     
     public void info(String message) {
@@ -1294,11 +1336,11 @@ public class TwitchConnection {
 
     public interface ConnectionListener {
 
-        void onJoinAttempt(String channel);
+        void onJoinAttempt(Room room);
 
-        void onChannelJoined(User channel);
+        void onChannelJoined(User user);
 
-        void onChannelLeft(String channel);
+        void onChannelLeft(Room room);
 
         void onJoin(User user);
 
@@ -1328,7 +1370,7 @@ public class TwitchConnection {
          * @param channel The channel the info message belongs to
          * @param infoMessage The info message
          */
-        void onInfo(String channel, String infoMessage);
+        void onInfo(Room room, String infoMessage);
 
         /**
          * An info message, usually intended to be directly output to the user.
@@ -1364,9 +1406,9 @@ public class TwitchConnection {
         
         void onRawSent(String text);
         
-        void onHost(String channel, String target);
+        void onHost(Room room, String target);
         
-        void onChannelCleared(String channel);
+        void onChannelCleared(Room room);
         
         /**
          * A notification in chat for a new subscriber or resub.
@@ -1379,11 +1421,91 @@ public class TwitchConnection {
          * @param months The number of subscribed months (may be -1 if invalid)
          * @param emotes The emotes tag, yet to be parsed (may be null)
          */
-        void onSubscriberNotification(String channel, User user, String text, String message, int months, String emotes);
+        void onSubscriberNotification(User user, String text, String message, int months, String emotes);
         
         void onSpecialMessage(String name, String message);
         
         void onRoomId(String channel, String id);
+        
+    }
+    
+    /**
+     * Helps to hide the echo to sent messages in chatrooms.
+     */
+    private static class SentMessages {
+        
+        /**
+         * How long keep sent messages stored.
+         */
+        private static final long TIMEOUT = 2000;
+        
+        private final Map<String, List<Message>> messages = new HashMap<>();
+        
+        /**
+         * Store sent message. Should only be called for chatrooms (or possibly
+         * other cases where sent messages are repeated back).
+         * 
+         * @param channel The channel
+         * @param message The text of the message
+         */
+        public synchronized void messageSent(String channel, String message) {
+            if (!messages.containsKey(channel)) {
+                messages.put(channel, new ArrayList<>());
+            }
+            messages.get(channel).add(new Message(channel, message));
+        }
+        
+        /**
+         * Check if the given channel and message text is currently stored as
+         * a sent message.
+         * 
+         * @param channel The channel
+         * @param message The text of the message
+         * @return true if the message was sent and the echo should be hidden,
+         * false otherwise
+         */
+        public synchronized boolean shouldHide(String channel, String message) {
+            if (messages.containsKey(channel)) {
+                clearOld(channel);
+                for (Message m : messages.get(channel)) {
+                    if (m.message.equals(message)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        
+        /**
+         * Remove stored messages for the given channel that have expired.
+         * 
+         * @param channel The channel
+         */
+        private void clearOld(String channel) {
+            Iterator<Message> it = messages.get(channel).iterator();
+            while (it.hasNext()) {
+                Message m = it.next();
+                if (System.currentTimeMillis() - m.time > TIMEOUT) {
+                    it.remove();
+                }
+            }
+        }
+        
+        private static class Message {
+            private final String channel;
+            private final String message;
+            private final long time = System.currentTimeMillis();
+            
+            public Message(String channel, String message) {
+                this.channel = channel;
+                this.message = message;
+            }
+            
+            @Override
+            public String toString() {
+                return channel+" "+message;
+            }
+        }
         
     }
 

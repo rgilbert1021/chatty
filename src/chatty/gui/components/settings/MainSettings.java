@@ -1,6 +1,7 @@
 
 package chatty.gui.components.settings;
 
+import chatty.gui.components.LinkLabel;
 import chatty.lang.Language;
 import java.awt.GridBagConstraints;
 import java.util.LinkedHashMap;
@@ -54,26 +55,36 @@ public class MainSettings extends SettingsPanel {
         //==========
         // Language
         //==========
-        
-        Map<String, String> languageOptions = new LinkedHashMap<>();
-        languageOptions.put("", Language.getString("settings.language.option.defaultLanguage"));
-        languageOptions.put("en", "English");
-        languageOptions.put("de", "German / Deutsch");
-        //languageOptions.put("es", "Spanish / Español");
-        //languageOptions.put("ja", "Japanese / 日本語");
-        //languageOptions.put("zh_TW", "Chinese (traditional)");
-        //languageOptions.put("fr", "French / Français");
-        
         languagePanel.add(new JLabel(Language.getString("settings.language.language")),
                 d.makeGbc(0, 0, 1, 1, GridBagConstraints.EAST));
         ComboStringSetting languageSetting = d.addComboStringSetting(
-                "language", 0, false, languageOptions);
+                "language", 0, false, getLanguageOptions());
         languagePanel.add(languageSetting,
                 d.makeGbc(1, 0, 1, 1, GridBagConstraints.WEST));
         
-        languagePanel.add(new JLabel(SettingConstants.HTML_PREFIX
-                +Language.getString("settings.language.info")),
+        languagePanel.add(new LinkLabel(SettingConstants.HTML_PREFIX
+                +Language.getString("settings.language.info")
+                + "<br /><br />"
+                + "If you would like to help with translations, check "
+                + "[url:http://chatty.github.io/localization.html the website].",
+                d.getLinkLabelListener()),
                 d.makeGbc(0, 1, 2, 1));
+    }
+    
+    public static Map<String, String> getLanguageOptions() {
+        Map<String, String> languageOptions = new LinkedHashMap<>();
+        languageOptions.put("", Language.getString("settings.language.option.defaultLanguage"));
+        languageOptions.put("en_US", "English (US)");
+        languageOptions.put("en_GB", "English (UK)");
+        languageOptions.put("de", "German / Deutsch");
+        languageOptions.put("es", "Spanish / Español");
+        languageOptions.put("ja", "Japanese / 日本語");
+        languageOptions.put("zh_TW", "Chinese (traditional)");
+        //languageOptions.put("fr", "French / Français");
+        languageOptions.put("tr", "Turkish / Türk");
+        languageOptions.put("pl", "Polish / Polski");
+        languageOptions.put("ko", "Korean / 한국어");
+        return languageOptions;
     }
   
 }
